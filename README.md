@@ -2,8 +2,10 @@
 # ingkit
 
 Toolkit for signal processing, file I/O, plotting, and more. Built on top of NumPy, SciPy, and Matplotlib.
+This software is released under the MIT License, see LICENSE.txt.
 
 信号解析、ファイル入出力、プロットなどのツールキット。NumPy、SciPy、Matplotlibを基盤としています。
+このソフトウェアはMITライセンスで公開されています。LICENSE.txtを参照してください。
 
 ## Installation
 
