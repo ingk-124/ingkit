@@ -1,0 +1,6 @@
+axes.grid       : False
+xtick.direction : in
+ytick.direction : in
+font.size       : 13
+axes.prop_cycle : cycler('color', ['red','blue','green','orange','purple'])
+figure.figsize  : 6, 4
