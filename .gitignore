@@ -1,4 +1,4 @@
-./.idea
-./venv
-./*.pdf
-./src/ingkit.egg-info
+/src/ingkit.egg-info
+/.idea
+/test
+/*.pdf
