@@ -37,52 +37,64 @@ def available_styles(user: bool = False) -> list[str]:
     return styles_user if user else (styles_sys + styles_user)
 
 
-def _find_style(style_name: str | Path) -> str:
+def _find_style(*style_name: str | Path) -> str | list[str]:
     """
     Check if a style is available.
 
     Parameters
     ----------
-    style_name : str or Path
-        Style name (without extension), or path to a .mplstyle file.
+    style_name : str, Path, or list of str/Path
+        Style name(s) (without extension), or path(s) to .mplstyle file(s).
 
     Returns
     -------
-    style_name : str
-        If found, return the style name (for built-in or user styles) or the path (for custom styles).
-        Path is returned as string for compatibility with plt.style.use().
+    style_name : str or list of str
+        If found, return the style name(s) (for built-in or user styles) or the path(s) (for custom styles).
+        Path(s) are returned as string(s) for compatibility with plt.style.use().
 
     Raises
     ------
     ValueError
-        If the style is not found or the file is invalid.
+        If any style is not found or any file is invalid.
+
+    Examples
+    --------
+    >>> _find_style("default")
+    'default'
+    >>> _find_style(Path("/path/to/some_style.mplstyle"))
+    '/path/to/some_style.mplstyle'
+    >>> _find_style("default", "my_default")
+    ['default', '/absolute/path/to/my_default.mplstyle']
+    >>> _find_style("default", "nonexistent_style")
+    ValueError: Style 'nonexistent_style' not found. Use available_styles() to see available styles.
     """
-    if isinstance(style_name, Path):  # Path
-        style_path = style_name.resolve()
-        if style_path.exists():
-            style_name_str = str(style_path)
+    if len(style_name) > 1:
+        return [_find_style(s) for s in style_name]  # Recursively check each style name in the list
+    else:
+        style_name = style_name[0]  # if only one style name is given
+
+        if isinstance(style_name, str):
+            if style_name == "default" or style_name in plt.style.available:  # Built-in style
+                return style_name
+            elif style_name in available_styles(user=True):  # styles in this package
+                return _find_style(MY_STYLE_DIR / f"{style_name}.mplstyle")
+            else:
+                return _find_style(Path(style_name))  # Try as a path (even if it's a string)
+        elif isinstance(style_name, Path):  # Path
+            style_path_str = str(style_name.resolve())  # Absolute path as string
             try:
-                mpl.rc_params_from_file(style_name_str)
-                return style_name_str
-            except Exception:
-                raise ValueError(f"'{style_name}' is not a valid style file.")
+                mpl.rc_params_from_file(style_path_str)  # Check if it's a valid style file
+                return style_path_str  # Return the path as string for compatibility with plt.style.use()
+            except Exception as e:  # Invalid style file
+                raise ValueError(f"'{style_name}' is not a valid style file.") from e
         else:
-            raise ValueError(f"Style file not found: {style_name}")
-
-    elif isinstance(style_name, str):  # str
-        if style_name == "default" or style_name in plt.style.available:
-            return style_name
-        elif style_name in available_styles(user=True):
-            return _find_style(MY_STYLE_DIR / f"{style_name}.mplstyle")
-        else:
-            return _find_style(Path(style_name))
-    raise ValueError(
-        f"Style '{style_name}' not found. "
-        f"Use available_styles() to see available styles."
-    )
+            raise ValueError(
+                f"Style '{style_name}' not found. "
+                f"Use available_styles() to see available styles."
+            )
 
 
-def use(style_name: str | Path = "default") -> None:
+def use(style_name: str | Path = "default", *style_names: str | Path) -> None:
     """
     Use a style by name or path.
 
@@ -90,14 +102,44 @@ def use(style_name: str | Path = "default") -> None:
     ----------
     style_name : str or Path
         Style name (without extension), or path to a .mplstyle file.
+    *style_names : str or Path
+        Additional style names or paths to apply (optional).
     """
-    plt.style.use(_find_style(style_name))
+    if style_names:
+        style_names = [style_name] + list(style_names)  # Combine the first style name with additional ones
+    else:
+        style_names = [style_name]
+    plt.style.use(_find_style(*style_names))
 
 
 @contextmanager
-def context(style_name: str | Path = "default"):
+def context(style_name: str | Path = "default", *style_names: str | Path):
+    """
+    Context manager to temporarily apply a style.
+    
+    Parameters
+    ----------
+    style_name : str or Path
+        Style name (without extension), or path to a .mplstyle file.
+    style_names : str or Path
+        Additional style names or paths to apply (optional).
+
+    Returns
+    -------
+    None
+
+    Examples
+    --------
+    >>> with context("my_default"):
+    ...     # This block will use the "my_default" style
+    ...     plt.plot([1, 2, 3], [4, 5, 6])
+    ...     plt.show()
+    ... # After the block, the style will revert to the previous state
+    ... plt.plot([1, 2, 3], [4, 5, 6])
+    ... plt.show()
+    """
     with plt.rc_context():
-        use(style_name)
+        use(style_name, *style_names)
         yield
 
 
