@@ -32,7 +32,7 @@ def _cutoff_check(cutoff_freq: float | list[float], filter_type: FILTER_TYPES
     -------
     cutoff_freq : float or np.ndarray
         Validated cutoff frequency/frequencies. For "lowpass" and "highpass" filters, this will be a single float.
-        For "bandpass" and "bandstop" filters, this will be a numpy array of shape (2,) containing [f_lc, f_hc].
+        For "bandpass" and "bandstop" filters, this will be a numpy array of shape (2, ) containing [f_lc, f_hc].
     filter_type : str
         The validated filters type (same as input).
 
@@ -73,75 +73,88 @@ def _cutoff_check(cutoff_freq: float | list[float], filter_type: FILTER_TYPES
     return cutoff_freq, filter_type
 
 
-def filters(t: np.ndarray, y: np.ndarray, cutoff_freq: float | list[float], filter_type: FILTER_TYPES,
-            filter_name: str = 'bessel', order: int = 4, window: str = 'boxcar',
-            detrend: str = 'constant') -> np.ndarray:
+def _iirfilter(y: np.ndarray, cutoff_freq: float | list[float], fs: float, filter_type: FILTER_TYPES,
+               axis: int = -1, filter_name: str = 'bessel', order: int = 4, detrend: str | None = None,
+               **kwargs) -> np.ndarray:
     """
-    Base function for applying filters to a signal. 
+    Base function for applying filters to a signal.
     
     Parameters
     ----------
-    t : np.ndarray (n,)
-        Time array (unit: s)
-    y : np.ndarray (..., n)
-        Signal array, where n is the length of the time array. The filters will be applied along the last axis.
+    y : np.ndarray
+        Data array to be filtered.
     cutoff_freq : list of float
         List of cutoff frequencies (unit: Hz) for the filters.
+    fs : float, optional
+        Sampling frequency (unit: Hz) of the signal to be filtered.
     filter_type : str
         Type of filters. Supported types: "lowpass", "highpass", "bandpass", "bandstop".
+    axis : int, optional (default: -1)
+        Axis along which the filters will be applied. Default is -1 (the last axis).
     filter_name : str, optional (default: 'bessel')
         Name of the IIR filter design method to use.
         See scipy.signal.iirfilter for available filter types.
     order : int, optional (default: 4)
         The order of the IIR filter.
-    window : str, optional (default: 'boxcar')
-        Desired window to use. See scipy.signal.get_window for available window types.
-    detrend : str, optional (default: 'constant')
-        Specifies how to detrend the data before filtering. See scipy.signal.detrend for available options.
+    detrend : str, optional (default: None)
+        Specifies how to detrend the data before filtering. See scipy.signal.detrend for available options. 
+        If None, no detrending is applied.
     **kwargs
         Additional keyword arguments to pass to scipy.signal.iirfilter.
-    
-        
-        
+
+    Returns
+    -------
+    np.ndarray
+        Filtered signal array with the same shape as input y.
+
+    See Also
+    --------
+    scipy.signal._iirfilter : Design an IIR filter and return its coefficients.
+    scipy.signal.sosfiltfilt : Apply a digital filter forward and backward to a signal.
     """
     cutoff_freq, filter_type = _cutoff_check(cutoff_freq, filter_type)
-    t = type_check.ensure_array_like_of_number(t, dtype=float)
-    if t.ndim != 1:
-        raise ValueError("Time array t should be one-dimensional.")
-    if t.shape[0] != y.shape[-1]:
-        raise ValueError("The length of time array should match the last dimension of signal array.")
-    dt = np.diff(t)
-    if not np.allclose(dt, dt[0]):
-        raise ValueError("Time array t should have uniform spacing.")
 
-    y = signal.detrend(y, axis=-1, type=detrend)
-    window = signal.get_window(window, t.size)
-    y = y * window
-    fs = 1 / dt[0]
+    if detrend is not None:
+        y = signal.detrend(y, axis=axis, type=detrend)
+
     if np.any(cutoff_freq >= 0.5 * fs):
         raise ValueError(f"Cutoff frequency should be less than Nyquist frequency ({0.5 * fs} Hz). "
                          f"Got cutoff_freq={cutoff_freq} Hz.")
 
     sos = signal.iirfilter(N=order, Wn=cutoff_freq,
-                           btype=filter_type, ftype=filter_name, fs=fs, output='sos')
+                           btype=filter_type, ftype=filter_name, fs=fs, output='sos', **kwargs)
 
-    return signal.sosfiltfilt(sos, y, axis=-1)
+    return signal.sosfiltfilt(sos, y, axis=axis)
 
 
-def lowpass_filter(t: np.ndarray, y: np.ndarray, cutoff_freq: float, **kwargs) -> np.ndarray:
+def lowpass_filter(y: np.ndarray, cutoff_freq: float, fs: float, axis: int = -1,
+                   filter_name: str = 'bessel', order: int = 4, detrend: str | None = None,
+                   **kwargs) -> np.ndarray:
     """
     Lowpass filter for y(t) with given cutoff frequency (unit: Hz).
 
     Parameters
     ----------
-    t : np.ndarray (n,)
-        Time array (unit: s)
-    y : np.ndarray (..., n)
-        Signal array, where n is the length of the time array. The filter will be applied along the last axis.
+    y : np.ndarray 
+        Data array to be filtered.
     cutoff_freq : float
         Cutoff frequency (unit: Hz) for the lowpass filter.
+    fs : float
+        Sampling frequency (unit: Hz) of the signal to be filtered.
+    axis : int, optional (default: -1)
+        Axis along which the filters will be applied. Default is -1 (the last axis).
+    filter_name : str, optional (default: 'bessel')
+        Name of the IIR filter design method to use.
+        See scipy.signal._iirfilter for available filter types.
+    order : int, optional (default: 4)
+        The order of the IIR filter.
+    window : str, optional (default: 'boxcar')
+        Desired window to use. See scipy.signal.get_window for available window types.
+    detrend : str, optional (default: None)
+        Specifies how to detrend the data before filtering. See scipy.signal.detrend for available options. 
+        If None, no detrending is applied.
     kwargs : additional keyword arguments
-        Additional keyword arguments to pass to the base filters function `filters()`. See its documentation for details.
+        Additional keyword arguments to pass to scipy.signal._iirfilter.
 
     Returns
     -------
@@ -150,25 +163,40 @@ def lowpass_filter(t: np.ndarray, y: np.ndarray, cutoff_freq: float, **kwargs) -
 
     See Also
     --------
-    filters : Base function for applying various types of filters to a signal.
+    _iirfilter : Base function for applying filters to a signal.
     """
-    return filters(t, y, cutoff_freq=cutoff_freq, filter_type="lowpass", **kwargs)
+    return _iirfilter(y, cutoff_freq=cutoff_freq, fs=fs, filter_type="lowpass", axis=axis, filter_name=filter_name,
+                      order=order, detrend=detrend, **kwargs)
 
 
-def highpass_filter(t: np.ndarray, y: np.ndarray, cutoff_freq: float, **kwargs) -> np.ndarray:
+def highpass_filter(y: np.ndarray, cutoff_freq: float, fs: float, axis: int = -1,
+                    filter_name: str = 'bessel', order: int = 4, detrend: str | None = None,
+                    **kwargs) -> np.ndarray:
     """
     Highpass filter for y(t) with given cutoff frequency (unit: Hz).
 
     Parameters
     ----------
-    t : np.ndarray (n,)
-        Time array (unit: s)
-    y : np.ndarray (..., n)
-        Signal array, where n is the length of the time array. The filter will be applied along the last axis.
+    y : np.ndarray 
+        Data array to be filtered.
     cutoff_freq : float
-        Cutoff frequency (unit: Hz) for the highpass filter.
+        Cutoff frequency (unit: Hz) for the lowpass filter.
+    fs : float
+        Sampling frequency (unit: Hz) of the signal to be filtered.
+    axis : int, optional (default: -1)
+        Axis along which the filters will be applied. Default is -1 (the last axis).
+    filter_name : str, optional (default: 'bessel')
+        Name of the IIR filter design method to use.
+        See scipy.signal._iirfilter for available filter types.
+    order : int, optional (default: 4)
+        The order of the IIR filter.
+    window : str, optional (default: 'boxcar')
+        Desired window to use. See scipy.signal.get_window for available window types.
+    detrend : str, optional (default: None)
+        Specifies how to detrend the data before filtering. See scipy.signal.detrend for available options. 
+        If None, no detrending is applied.
     kwargs : additional keyword arguments
-        Additional keyword arguments to pass to the base filters function `filters()`. See its documentation for details.
+        Additional keyword arguments to pass to scipy.signal._iirfilter.
 
     Returns
     -------
@@ -177,25 +205,40 @@ def highpass_filter(t: np.ndarray, y: np.ndarray, cutoff_freq: float, **kwargs) 
 
     See Also
     --------
-    filters : Base function for applying various types of filters to a signal.
+    _iirfilter : Base function for applying filters to a signal.
     """
-    return filters(t, y, cutoff_freq=cutoff_freq, filter_type="highpass", **kwargs)
+    return _iirfilter(y, cutoff_freq=cutoff_freq, fs=fs, filter_type="highpass", axis=axis, filter_name=filter_name,
+                      order=order, detrend=detrend, **kwargs)
 
 
-def bandpass_filter(t: np.ndarray, y: np.ndarray, cutoff_freq: list[float], **kwargs) -> np.ndarray:
+def bandpass_filter(y: np.ndarray, cutoff_freq: list[float], fs: float, axis: int = -1,
+                    filter_name: str = 'bessel', order: int = 4, detrend: str | None = None,
+                    **kwargs) -> np.ndarray:
     """
     Bandpass filter for y(t) with given cutoff frequencies (unit: Hz).
 
     Parameters
     ----------
-    t : np.ndarray (n,)
-        Time array (unit: s)
-    y : np.ndarray (..., n)
-        Signal array, where n is the length of the time array. The filter will be applied along the last axis.
-    cutoff_freq : list of float
-        List of two cutoff frequencies [f_lc, f_hc] (unit: Hz) for the bandpass filter, where f_lc < f_hc.
+    y : np.ndarray 
+        Data array to be filtered.
+    cutoff_freq : float
+        Cutoff frequency (unit: Hz) for the lowpass filter.
+    fs : float
+        Sampling frequency (unit: Hz) of the signal to be filtered.
+    axis : int, optional (default: -1)
+        Axis along which the filters will be applied. Default is -1 (the last axis).
+    filter_name : str, optional (default: 'bessel')
+        Name of the IIR filter design method to use.
+        See scipy.signal._iirfilter for available filter types.
+    order : int, optional (default: 4)
+        The order of the IIR filter.
+    window : str, optional (default: 'boxcar')
+        Desired window to use. See scipy.signal.get_window for available window types.
+    detrend : str, optional (default: None)
+        Specifies how to detrend the data before filtering. See scipy.signal.detrend for available options. 
+        If None, no detrending is applied.
     kwargs : additional keyword arguments
-        Additional keyword arguments to pass to the base filters function `filters()`. See its documentation for details.
+        Additional keyword arguments to pass to scipy.signal._iirfilter.
 
     Returns
     -------
@@ -204,25 +247,41 @@ def bandpass_filter(t: np.ndarray, y: np.ndarray, cutoff_freq: list[float], **kw
 
     See Also
     --------
-    filters : Base function for applying various types of filters to a signal.
+    _iirfilter : Base function for applying filters to a signal.
     """
-    return filters(t, y, cutoff_freq=cutoff_freq, filter_type="bandpass", **kwargs)
+    return _iirfilter(y, cutoff_freq=cutoff_freq, fs=fs, filter_type="bandpass", axis=axis, filter_name=filter_name,
+                      order=order, detrend=detrend, **kwargs)
 
 
-def bandstop_filter(t: np.ndarray, y: np.ndarray, cutoff_freq: list[float], **kwargs) -> np.ndarray:
+def bandstop_filter(y: np.ndarray, cutoff_freq: list[float], fs: float, axis: int = -1,
+                    filter_name: str = 'bessel', order: int = 4, detrend: str | None = None,
+                    **kwargs) -> np.ndarray:
     """
     Bandstop filter for y(t) with given cutoff frequencies (unit: Hz).
 
+
     Parameters
     ----------
-    t : np.ndarray (n,)
-        Time array (unit: s)
-    y : np.ndarray (..., n)
-        Signal array, where n is the length of the time array. The filter will be applied along the last axis.
-    cutoff_freq : list of float
-        List of two cutoff frequencies [f_lc, f_hc] (unit: Hz) for the bandstop filter, where f_lc < f_hc.
+    y : np.ndarray 
+        Data array to be filtered.
+    cutoff_freq : float
+        Cutoff frequency (unit: Hz) for the lowpass filter.
+    fs : float
+        Sampling frequency (unit: Hz) of the signal to be filtered.
+    axis : int, optional (default: -1)
+        Axis along which the filters will be applied. Default is -1 (the last axis).
+    filter_name : str, optional (default: 'bessel')
+        Name of the IIR filter design method to use.
+        See scipy.signal._iirfilter for available filter types.
+    order : int, optional (default: 4)
+        The order of the IIR filter.
+    window : str, optional (default: 'boxcar')
+        Desired window to use. See scipy.signal.get_window for available window types.
+    detrend : str, optional (default: None)
+        Specifies how to detrend the data before filtering. See scipy.signal.detrend for available options. 
+        If None, no detrending is applied.
     kwargs : additional keyword arguments
-        Additional keyword arguments to pass to the base filters function `filters()`. See its documentation for details.
+        Additional keyword arguments to pass to scipy.signal._iirfilter.
 
     Returns
     -------
@@ -231,14 +290,14 @@ def bandstop_filter(t: np.ndarray, y: np.ndarray, cutoff_freq: list[float], **kw
 
     See Also
     --------
-    filters : Base function for applying various types of filters to a signal.
+    _iirfilter : Base function for applying filters to a signal.
     """
-    return filters(t, y, cutoff_freq=cutoff_freq, filter_type="bandstop", **kwargs)
+    return _iirfilter(y, cutoff_freq=cutoff_freq, fs=fs, filter_type="bandstop", axis=axis,
+                      filter_name=filter_name, order=order, detrend=detrend, **kwargs)
 
 
-def filter_response(cutoff_freq: float | list[float], filter_type: FILTER_TYPES,
-                    filter_name: str = 'bessel', order: int = 4, fs: float = 1e6, worN: int = 512
-                    ) -> tuple[np.ndarray, np.ndarray]:
+def filter_response(cutoff_freq: float | list[float], filter_type: FILTER_TYPES, filter_name: str = 'bessel',
+                    order: int = 4, fs: float = 1e6, worN: int = 1024) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute the frequency response of a filter.
 
@@ -254,17 +313,17 @@ def filter_response(cutoff_freq: float | list[float], filter_type: FILTER_TYPES,
         - "bandstop"
     filter_name : str, optional (default: 'bessel')
         Name of the IIR filter design method to use.
-        See scipy.signal.iirfilter for available filter types.
+        See scipy.signal._iirfilter for available filter types.
     order : int, optional (default: 4)
         The order of the IIR filter.
-    worN : int, optional (default: 512)
+    worN : int, optional (default: 1024)
         The number of frequencies at which to compute the response.
-    fs : float, optional (default: 1.0)
+    fs : float, optional (default: 1e6)
         Sampling frequency (unit: Hz) of the signal to be filtered. This is used to normalize the cutoff frequencies.
 
     Returns
     -------
-    w : np.ndarray
+    f : np.ndarray
         Frequencies at which the response was computed (unit: Hz).
     h : np.ndarray
         Frequency response of the filter at frequencies w.
@@ -276,8 +335,8 @@ def filter_response(cutoff_freq: float | list[float], filter_type: FILTER_TYPES,
     cutoff_freq, filter_type = _cutoff_check(cutoff_freq, filter_type)
     sos = signal.iirfilter(N=order, Wn=cutoff_freq,
                            btype=filter_type, ftype=filter_name, fs=fs, output='sos')
-    w, h = signal.sosfreqz(sos, worN=worN, fs=fs)
-    return w, h
+    f, h = signal.sosfreqz(sos, worN=worN, fs=fs)
+    return f, h
 
 
 if __name__ == '__main__':
@@ -286,11 +345,11 @@ if __name__ == '__main__':
     cutoff_freqs = [200e3, [2e3, 100e3]]
     filter_types = ["lowpass", "bandpass"]
     fig, axes = plt.subplots(2, 1, figsize=(8, 6))
-    for cutoff_freq, filter_type in zip(cutoff_freqs, filter_types):
-        w, h = filter_response(cutoff_freq=cutoff_freq, filter_type=filter_type, filter_name='bessel', order=6, fs=1e6,
+    for fc, ft in zip(cutoff_freqs, filter_types):
+        w, h = filter_response(cutoff_freq=fc, filter_type=ft, filter_name='bessel', order=6, fs=1e6,
                                worN=512)
-        axes[0].semilogx(w[1:], 20 * np.log10(np.abs(h[1:])), label=f'{filter_type} filter')
-        axes[1].semilogx(w[1:], np.angle(h[1:]), label=f'{filter_type} filter')
+        axes[0].semilogx(w[1:], 20 * np.log10(np.abs(h[1:])), label=f'{ft} filter')
+        axes[1].semilogx(w[1:], np.angle(h[1:]), label=f'{ft} filter')
     axes[0].set_title('Frequency Response (Magnitude)')
     axes[0].set_ylabel('Magnitude (dB)')
     axes[0].set_xlim(1e3, 5e5)
@@ -308,22 +367,23 @@ if __name__ == '__main__':
     np.random.seed(1234)
     f_list = [0.5e3, 10e3, 150e3]  # Hz
     A_list = [3, 2, 1]
-    t = np.linspace(-1, 2, 3000) * 1e-3  # seconds
+    fs = 1e6  # sampling frequency
+    t = np.arange(-1e-3, 1e-3, 1 / fs)  # time array from -1 ms to 1 ms
     phase_list = np.random.uniform(0, 2 * np.pi, size=len(f_list))
     y = np.sum([A * np.exp(1j * (2 * np.pi * f * t + p)) for A, f, p in zip(A_list, f_list, phase_list)],
-                    axis=0).real
+               axis=0).real
     y_noise = y + np.random.normal(scale=0.5, size=t.shape)
 
     fig, ax = plt.subplots(figsize=(8, 4))
     # ax.plot(t*1e3, y, "k--", label='Original Signal')
-    ax.plot(t*1e3, y_noise, label='Noisy Signal')
+    ax.plot(t * 1e3, y_noise, label='Noisy Signal')
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Amplitude')
-    for cutoff_freq, filter_type in zip(cutoff_freqs, filter_types):
-        y_filtered = filters(t, y_noise, cutoff_freq=cutoff_freq, filter_type=filter_type, filter_name='bessel', order=4,
-                             window='boxcar', detrend='constant')
-        ax.plot(t*1e3, y_filtered, label=f'{filter_type} Filtered Signal')
-    ax.set_xlim(0, 1)
+    for fc, ft in zip(cutoff_freqs, filter_types):
+        y_filtered = _iirfilter(y_noise, cutoff_freq=fc, fs=fs, filter_type=ft, filter_name='bessel',
+                                order=6, window='hann', detrend='constant')
+        ax.plot(t * 1e3, y_filtered, label=f'{ft} Filtered Signal')
+    ax.set_xlim(-1, 1)
     ax.legend()
     fig.tight_layout()
     plt.show()

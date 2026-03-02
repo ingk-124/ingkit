@@ -3,13 +3,14 @@
 
 from __future__ import annotations
 
-from matplotlib.colors import Colormap
+import matplotlib
+from matplotlib import pyplot as plt
 
 
 def get_cmap_with_extreme(name: str,
                           bad: str | tuple | list = None,
                           under: str | tuple | list = None,
-                          over: str | tuple | list = None) -> Colormap:
+                          over: str | tuple | list = None) -> matplotlib.colors.ListedColormap:
     """
     Create a custom colormap with specified bad, under, and over colors.
 
@@ -29,4 +30,4 @@ def get_cmap_with_extreme(name: str,
     Colormap
         A new colormap with the specified properties.
     """
-    return Colormap(name).copy().with_extremes(bad=bad, under=under, over=over)
+    return plt.get_cmap(name).copy().with_extremes(bad=bad, under=under, over=over)

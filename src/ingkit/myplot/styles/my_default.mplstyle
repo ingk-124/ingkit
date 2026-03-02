@@ -4,7 +4,7 @@ savefig.format: pdf
 figure.dpi: 200
 
 ## font
-font.size       : 13
+font.size       : 12
 # axes.titlesize  : large
 
 ## axes

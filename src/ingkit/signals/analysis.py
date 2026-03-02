@@ -1,4 +1,4 @@
-# src/ingkit/signals/fft.py
+# src/ingkit/signals/analysis.py
 # FFT utilities for signal processing.
 
 from __future__ import annotations
@@ -9,34 +9,28 @@ import numpy as np
 from scipy import signal
 
 
-def compute_fft(y: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
+def ens_N(points: int, nperseg: int, noverlap: int) -> int:
     """
-    Compute the Fast Fourier Transform (FFT) of a signal.
+    Compute the number of ensemble segments for Welch's method.
 
     Parameters
     ----------
-    y : np.ndarray
-        The input signal. Time axis should be along the last dimension.
-    fs : float
-        The sampling frequency of the signal.
+    points : int
+        The total number of data points in the signal.
+    nperseg : int
+        The length of each segment.
+    noverlap : int
+        The number of points to overlap between segments.
 
     Returns
     -------
-    freqs : np.ndarray
-        The frequencies corresponding to the FFT components.
-    fft_values : np.ndarray
-        The FFT values of the input signal.
+    ens : int
+        The number of ensemble segments that can be formed with the given parameters.
     """
-    n = y.shape[-1]
-    if np.iscomplex(y).any():
-        # For complex signals, use the full FFT.
-        fft_values = np.fft.fft(y, axis=-1)
-        freqs = np.fft.fftfreq(n, d=1 / fs)
-    else:
-        # For real signals, use the rFFT which is more efficient.
-        fft_values = np.fft.rfft(y, axis=-1)
-        freqs = np.fft.rfftfreq(n, d=1 / fs)
-    return freqs, fft_values
+    step = nperseg - noverlap
+    if step <= 0:
+        raise ValueError("noverlap must be less than nperseg")
+    return (points - nperseg) // step + 1
 
 
 def nperseg_from_ens(points: int, ens: int, overlap_ratio: float = 0.5, fs: float = None) -> int:
@@ -70,13 +64,8 @@ def nperseg_from_ens(points: int, ens: int, overlap_ratio: float = 0.5, fs: floa
     nperseg = points // ((ens - 1) * (1 - r) + 1)
     nperseg = max(1, int(nperseg))  # Ensure nperseg is at least 1
 
-    def ens_(nperseg_: int) -> int:
-        noverlap_ = int(nperseg_ * overlap_ratio)
-        step_ = nperseg_ - noverlap_
-        return (points - nperseg_) // step_ + 1
-
     while True:
-        ens_calculated = ens_(nperseg)
+        ens_calculated = ens_N(points, nperseg, int(nperseg * overlap_ratio))
         if nperseg == 1:
             break
         elif ens_calculated >= ens:
@@ -135,11 +124,6 @@ def coherence_analysis(x: np.ndarray, y: np.ndarray, fs: float, **kwargs: Any) -
     if kwargs.get("noverlap") is None:
         kwargs["noverlap"] = kwargs["nperseg"] // 2
 
-    step = kwargs["nperseg"] - kwargs["noverlap"]
-    if step <= 0:
-        raise ValueError("noverlap must be < nperseg")
-    ens = 1 + (n - kwargs["noverlap"]) // step
-
     freqs, Pxx = signal.welch(x, fs=fs, **kwargs)
     _, Pyy = signal.welch(y, fs=fs, **kwargs)
     _, Cxy = signal.csd(x, y, fs=fs, **kwargs)
@@ -147,4 +131,4 @@ def coherence_analysis(x: np.ndarray, y: np.ndarray, fs: float, **kwargs: Any) -
     coh2 = (np.abs(Cxy) ** 2) / (Pxx * Pyy)
     phase = np.angle(Cxy)
 
-    return freqs, Pxx, Pyy, Cxy, coh2, phase, ens
+    return freqs, Pxx, Pyy, Cxy, coh2, phase, ens_N(n, kwargs["nperseg"], kwargs["noverlap"])
