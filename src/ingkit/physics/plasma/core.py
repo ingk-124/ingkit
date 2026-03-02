@@ -13,7 +13,7 @@ def _Te_J(Te: float | np.ndarray) -> float | np.ndarray:
     Parameters
     ----------
     Te : float or np.ndarray
-        Electron temperature (unit: eV)
+        Electron temperature (eV)
 
     Returns
     -------
@@ -30,7 +30,7 @@ def _Te_eV(Te_J: float | np.ndarray) -> float | np.ndarray:
     Parameters
     ----------
     Te_J : float or np.ndarray
-        Electron temperature (unit: Joules)
+        Electron temperature (Joules)
 
     Returns
     -------
@@ -49,12 +49,12 @@ def f_pe(ne: float | np.ndarray) -> float | np.ndarray:
     Parameters
     ----------
     ne : float or np.ndarray
-        Electron density (unit: m^-3)
+        Electron density (m^-3)
 
     Returns
     -------
     float or np.ndarray
-        The electron plasma frequency (unit: Hz).
+        The electron plasma frequency (Hz).
     """
     return np.sqrt(ne * e ** 2 / (epsilon_0 * m_e)) / (2 * np.pi)
 
@@ -66,7 +66,7 @@ def f_pi(ni: float | np.ndarray, Z: int = 1, A: int = 1) -> float | np.ndarray:
     Parameters
     ----------
     ni : float or np.ndarray
-        Ion density (unit: m^-3)
+        Ion density (m^-3)
     Z : int, optional
         Ion charge state (default is 1 for singly ionized)
     A : int, optional
@@ -75,7 +75,7 @@ def f_pi(ni: float | np.ndarray, Z: int = 1, A: int = 1) -> float | np.ndarray:
     Returns
     -------
     float or np.ndarray
-        The ion plasma frequency (unit: Hz).
+        The ion plasma frequency (Hz).
     """
     m_i = A * m_p
     return np.sqrt(ni * (Z * e) ** 2 / (epsilon_0 * m_i)) / (2 * np.pi)
@@ -88,7 +88,7 @@ def cyclotron_frequency(B: float | np.ndarray, q: float = e, m: float = m_e) -> 
     Parameters
     ----------
     B : float or np.ndarray
-        Magnetic field strength (unit: Tesla)
+        Magnetic field strength (Tesla)
     q : float, optional
         Charge of the particle (default is electron charge e)
     m : float, optional
@@ -97,7 +97,7 @@ def cyclotron_frequency(B: float | np.ndarray, q: float = e, m: float = m_e) -> 
     Returns
     -------
     float or np.ndarray
-        The cyclotron frequency (unit: Hz).
+        The cyclotron frequency (Hz).
 
     Notes
     -----
@@ -113,12 +113,12 @@ def f_ce(B: float | np.ndarray) -> float | np.ndarray:
     Parameters
     ----------
     B : float or np.ndarray
-        Magnetic field strength (unit: Tesla)
+        Magnetic field strength (Tesla)
 
     Returns
     -------
     float or np.ndarray
-        The electron cyclotron frequency (unit: Hz).
+        The electron cyclotron frequency (Hz).
     """
     return cyclotron_frequency(B, q=e, m=m_e)
 
@@ -130,7 +130,7 @@ def f_ci(B: float | np.ndarray, Z: int = 1, A: int = 1) -> float | np.ndarray:
     Parameters
     ----------
     B : float or np.ndarray
-        Magnetic field strength (unit: Tesla)
+        Magnetic field strength (Tesla)
     Z : int, optional
         Ion charge state (default is 1 for singly ionized)
     A : int, optional
@@ -139,7 +139,7 @@ def f_ci(B: float | np.ndarray, Z: int = 1, A: int = 1) -> float | np.ndarray:
     Returns
     -------
     float or np.ndarray
-        The ion cyclotron frequency (unit: Hz).
+        The ion cyclotron frequency (Hz).
     """
     m_i = A * m_p
     return cyclotron_frequency(B, q=Z * e, m=m_i)
@@ -153,9 +153,9 @@ def f_lh(B: float | np.ndarray, ne: float | np.ndarray, Z: int = 1, A: int = 1
     Parameters
     ----------
     B : float or np.ndarray
-        Magnetic field strength (unit: Tesla)
+        Magnetic field strength (Tesla)
     ne : float or np.ndarray
-        Electron density (unit: m^-3)
+        Electron density (m^-3)
     Z : int, optional
         Ion charge state (default is 1 for singly ionized)
     A : int, optional
@@ -164,7 +164,7 @@ def f_lh(B: float | np.ndarray, ne: float | np.ndarray, Z: int = 1, A: int = 1
     Returns
     -------
     float or np.ndarray
-        The lower hybrid frequency (unit: Hz).
+        The lower hybrid frequency (Hz).
 
     Notes
     -----
@@ -183,14 +183,14 @@ def f_uh(B: float | np.ndarray, ne: float | np.ndarray) -> float | np.ndarray:
     Parameters
     ----------
     B : float or np.ndarray
-        Magnetic field strength (unit: Tesla)
+        Magnetic field strength (Tesla)
     ne : float or np.ndarray
-        Electron density (unit: m^-3)
+        Electron density (m^-3)
 
     Returns
     -------
     float or np.ndarray
-        The upper hybrid frequency (unit: Hz).
+        The upper hybrid frequency (Hz).
 
     Notes
     -----
@@ -208,12 +208,12 @@ def o_mode_cutoff_f(ne: float | np.ndarray) -> float | np.ndarray:
     Parameters
     ----------
     ne : float or np.ndarray
-        Electron density (unit: m^-3)
+        Electron density (m^-3)
 
     Returns
     -------
     float or np.ndarray
-        The O-mode cutoff frequency (unit: Hz).
+        The O-mode cutoff frequency (Hz).
 
     Notes
     -----
@@ -229,14 +229,14 @@ def x_mode_cutoff_f(ne: float | np.ndarray, B: float | np.ndarray) -> float | np
     Parameters
     ----------
     ne : float or np.ndarray
-        Electron density (unit: m^-3)
+        Electron density (m^-3)
     B : float or np.ndarray
-        Magnetic field strength (unit: Tesla)
+        Magnetic field strength (Tesla)
 
     Returns
     -------
     float or np.ndarray
-        The X-mode cutoff frequency (unit: Hz).
+        The X-mode cutoff frequency (Hz).
 
     Notes
     -----
@@ -256,9 +256,9 @@ def coulomb_logarithm(Te: float | np.ndarray, ne: float | np.ndarray) -> float |
     Parameters
     ----------
     Te : float or np.ndarray
-        Electron temperature (unit: eV)
+        Electron temperature (eV)
     ne : float or np.ndarray
-        Electron density (unit: m^-3)
+        Electron density (m^-3)
 
     Returns
     -------
@@ -282,13 +282,13 @@ def lundquist_number(B: float | np.ndarray, L: float | np.ndarray, ne: float | n
     Parameters
     ----------
     B : float or np.ndarray
-        Magnetic field strength (unit: Tesla)
+        Magnetic field strength (Tesla)
     L : float or np.ndarray
-        Characteristic length scale (unit: m)
+        Characteristic length scale (m)
     ne : float or np.ndarray
-        Electron density (unit: m^-3)
+        Electron density (m^-3)
     Te : float or np.ndarray
-        Electron temperature (unit: eV)
+        Electron temperature (eV)
 
     Returns
     -------
@@ -323,14 +323,14 @@ def spitzer_resistivity(Te: float | np.ndarray, ne: float | np.ndarray) -> float
     Parameters
     ----------
     Te : float or np.ndarray
-        Electron temperature (unit: eV)
+        Electron temperature (eV)
     ne : float or np.ndarray
-        Electron density (unit: m^-3)
+        Electron density (m^-3)
 
     Returns
     -------
     float or np.ndarray
-        The Spitzer resistivity (unit: Ohm m).
+        The Spitzer resistivity (Ohm m).
 
     Notes
     -----
