@@ -13,6 +13,7 @@ License under MIT License.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from typing import Iterator
 from pathlib import Path
 
 import matplotlib as mpl
@@ -113,7 +114,7 @@ def use(style_name: str | Path = "default", *style_names: str | Path) -> None:
 
 
 @contextmanager
-def context(style_name: str | Path = "default", *style_names: str | Path):
+def context(style_name: str | Path = "default", *style_names: str | Path) -> Iterator[None]:
     """
     Context manager to temporarily apply a style.
     
@@ -184,7 +185,7 @@ def get_rcParams(style_name: str | Path) -> dict:
     return rcParams
 
 
-def quick_look(style_name: str | Path, n_lines: int | None = None):
+def quick_look(style_name: str | Path, n_lines: int | None = None) -> None:
     """
     Quick preview of a mplstyle file.
 

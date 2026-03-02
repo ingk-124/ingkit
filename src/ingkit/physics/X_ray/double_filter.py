@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import matplotlib.pyplot as plt
+from typing import Callable
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator, interp1d
 
@@ -10,7 +13,7 @@ class DoubleFilter:
     def __init__(self,
                  filter1: AbsorptionFilter | FilterSet,
                  filter2: AbsorptionFilter | FilterSet,
-                 E_ph: np.ndarray = None):
+                 E_ph: np.ndarray = None) -> None:
         """
         Class to calculate the intensity ratios of two X-ray filters over a range of electron temperatures.
 
@@ -32,7 +35,7 @@ class DoubleFilter:
     @staticmethod
     def from_materials(material1: str, thickness1: float,
                        material2: str, thickness2: float,
-                       photon_energy: np.ndarray = None):
+                       photon_energy: np.ndarray = None) -> "DoubleFilter":
         """
         Create DoubleFilter from materials and thicknesses.
 
@@ -215,7 +218,7 @@ class DoubleFilter:
         return fig, ax, ax2
 
     @property
-    def Te_from_ratio12(self):
+    def Te_from_ratio12(self) -> Callable[..., float | np.ndarray | None]:
         """
         Function to get electron temperature from intensity ratio (filter2 / filter1).
 
@@ -234,7 +237,7 @@ class DoubleFilter:
             return lambda ratio, angle: self._Te_from_ratio[0](ratio, angle)
 
     @property
-    def Te_from_ratio21(self):
+    def Te_from_ratio21(self) -> Callable[..., float | np.ndarray | None]:
         """
         Function to get electron temperature from intensity ratio (filter1 / filter2).
 
@@ -254,7 +257,7 @@ class DoubleFilter:
 
     def set_Te_from_ratio(self, Te: float | np.ndarray = None,
                           E_photon: np.ndarray = None,
-                          angle: float | np.ndarray = 0.0):
+                          angle: float | np.ndarray = 0.0) -> None:
         """
         Set the function to get electron temperature from intensity ratio.
 
