@@ -51,6 +51,7 @@ def bremsstrahlung_spectrum(Te: float | np.ndarray, ne: float | np.ndarray, Z_ef
     -------
     float or np.ndarray
         The bremsstrahlung spectrum (unit: photons/s/m^3/eV).
+        The output shape will depend on the input shapes of Te, ne, and E_ph. The last dimension corresponds to the photon energy array E_ph.
     """
 
     if E_ph is None:
@@ -78,6 +79,7 @@ def integrate_spectrum(spectra: float | np.ndarray, E_ph: float | np.ndarray,
     ----------
     spectra : float or np.ndarray
         The bremsstrahlung spectrum (unit: photons/s/m^3/eV) as a function of photon energy.
+        The last dimension should correspond to the photon energy array E_ph.
     E_ph : float or np.ndarray
         Photon energy array corresponding to the spectra (unit: eV).
     transmission : float or np.ndarray, optional
@@ -92,11 +94,11 @@ def integrate_spectrum(spectra: float | np.ndarray, E_ph: float | np.ndarray,
         transmission = np.ones_like(E_ph)
     else:
         transmission = type_check.ensure_array_like_of_float(transmission)
-    if transmission.shape != E_ph.shape:
-        transmission = np.broadcast_to(transmission, E_ph.shape)
+    if transmission.shape[-1] != E_ph.shape[0]:
+        raise ValueError("Transmission array must have the same length as E_ph.")
 
-    spectra = spectra * transmission[None, :]
-    intensities = np.trapezoid(spectra * E_ph[None, :], np.log(E_ph), axis=-1)
+    spectra = spectra * transmission
+    intensities = np.trapezoid(spectra * E_ph, np.log(E_ph), axis=-1)
     if nan_to_zero:
         intensities = np.nan_to_num(intensities, nan=0)
     return intensities
