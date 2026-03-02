@@ -4,7 +4,7 @@ import re
 import time
 from itertools import combinations
 from pathlib import Path
-from typing import Union, Literal
+from typing import Any, Literal, Union
 
 import numpy as np
 import requests
@@ -23,7 +23,7 @@ options.add_argument('headless')
 FILE_LOC = Path(__file__).parent
 
 
-def _calc_att_length_from_sf(photon_energy: np.ndarray, f2: np.ndarray, num_density: float):
+def _calc_att_length_from_sf(photon_energy: np.ndarray, f2: np.ndarray, num_density: float) -> np.ndarray:
     """
     Calculate X-ray attenuation length from atomic scattering factor (imaginary part)
 
@@ -58,7 +58,7 @@ def _calc_att_length_from_sf(photon_energy: np.ndarray, f2: np.ndarray, num_dens
     return np.array([photon_energy, att_len * 1e6]).T
 
 
-def _calc_att_length_from_transmission(photon_energy: np.ndarray, thicknesses: list[float], transmissions: np.ndarray):
+def _calc_att_length_from_transmission(photon_energy: np.ndarray, thicknesses: list[float], transmissions: np.ndarray) -> np.ndarray:
     """
     Calculate X-ray attenuation length from transmission data
 
@@ -104,7 +104,8 @@ def _calc_att_length_from_transmission(photon_energy: np.ndarray, thicknesses: l
 def _get_transmission_data_from_CXRO(material: str, thickness: float, density: float = -1,
                                      ph_min: float = 10, ph_max: float = 30000, n_pts: int = 1000,
                                      ph_scale: Literal["log", "lin"] = "log",
-                                     save: bool = True, save_dir: Union[str, Path] = None, force: bool = False):
+                                     save: bool = True, save_dir: Union[str, Path] = None, force: bool = False
+                                     ) -> tuple[np.ndarray, dict[str, str | float]]:
     """
     Get transmission data from CXRO (https://henke.lbl.gov/optical_constants/filter2.html)
 
@@ -150,7 +151,7 @@ def _get_transmission_data_from_CXRO(material: str, thickness: float, density: f
         opt = [_.get_attribute('value') for _ in Select(pulldown).options]
         time.sleep(0.5)
 
-        def change_value(name, value):
+        def change_value(name: str, value: str) -> None:
             driver.execute_script(f'document.getElementsByName("{name}")[0].value = "{value}";')
             return
 
@@ -203,8 +204,11 @@ def _get_transmission_data_from_CXRO(material: str, thickness: float, density: f
     return data, info
 
 
-def _attenuation_length(material, density=-1, thicknesses=(1e-2, 1e-1, 1, 10),
-                        save=True, save_dir=None, CXRO_kw=None, force=False):
+def _attenuation_length(material: str, density: float = -1,
+                        thicknesses: tuple[float, ...] = (1e-2, 1e-1, 1, 10),
+                        save: bool = True, save_dir: str | Path | None = None,
+                        CXRO_kw: dict[str, Any] | None = None, force: bool = False
+                        ) -> tuple[np.ndarray, dict[str, str | float]]:
     """
     Calculate X-ray transmission
 
@@ -283,7 +287,8 @@ def _attenuation_length(material, density=-1, thicknesses=(1e-2, 1e-1, 1, 10),
 
 class AbsorptionFilter:
     def __init__(self, material: str, thickness: float = 1, density: float = -1,
-                 force=False, attn_kw=None, CXRO_kw=None):
+                 force: bool = False, attn_kw: dict[str, Any] | None = None,
+                 CXRO_kw: dict[str, Any] | None = None) -> None:
         """
         Calculate X-ray transmission
 
@@ -343,34 +348,34 @@ class AbsorptionFilter:
         self._E_ph = _atten_len_data[:, 0].ravel()
         self._attn_len = _atten_len_data[:, 1].ravel()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"AbsorptionFilter(material={self.material}, thickness={self.thickness}, density={self.density})"
 
     @property
-    def material(self):
+    def material(self) -> str:
         return self._info["material"]
 
     @property
-    def density(self):
+    def density(self) -> float:
         return self._info["density"]
 
     @property
-    def E_ph(self):
+    def E_ph(self) -> np.ndarray:
         return self._E_ph
 
     @property
-    def attn_len(self):
+    def attn_len(self) -> np.ndarray:
         return self._attn_len
 
     @property
-    def thickness(self):
+    def thickness(self) -> float:
         return self._thickness
 
     @thickness.setter
-    def thickness(self, thickness):
+    def thickness(self, thickness: float) -> None:
         self._thickness = thickness
 
-    def interpolate(self, E_ph: np.ndarray):
+    def interpolate(self, E_ph: np.ndarray) -> np.ndarray:
         """
         Interpolate attenuation length
 
@@ -386,7 +391,7 @@ class AbsorptionFilter:
         """
         return np.interp(E_ph, self._E_ph, self._attn_len)
 
-    def transmission(self, E_ph: np.ndarray = None, thickness: float = None):
+    def transmission(self, E_ph: np.ndarray | None = None, thickness: float | None = None) -> np.ndarray:
         """
         Calculate X-ray transmission of the material
 
@@ -405,8 +410,8 @@ class AbsorptionFilter:
         """
         return self.transmission_angle(E_ph=E_ph, angle=0, thickness=thickness)
 
-    def transmission_angle(self, E_ph: np.ndarray = None, angle: np.ndarray | float = 0,
-                           thickness: float = None, squeeze: bool = True):
+    def transmission_angle(self, E_ph: np.ndarray | None = None, angle: np.ndarray | float = 0,
+                           thickness: float | None = None, squeeze: bool = True) -> np.ndarray:
         """
         Calculate transmission with angle
 
@@ -447,8 +452,8 @@ class AbsorptionFilter:
         transmission = transmission.squeeze() if squeeze else transmission
         return np.clip(transmission, 0, 1)  # just in case of numerical errors
 
-    def plot_transmission(self, E_ph: np.ndarray = None, thickness: float = None,
-                          ax=None, **kwargs):
+    def plot_transmission(self, E_ph: np.ndarray | None = None, thickness: float | None = None,
+                          ax: plt.Axes | None = None, **kwargs: Any) -> plt.Axes:
         """
         Plot X-ray transmission
 
@@ -477,7 +482,7 @@ class AbsorptionFilter:
 
 
 class FilterSet:
-    def __init__(self, filters: list[AbsorptionFilter]):
+    def __init__(self, filters: list[AbsorptionFilter]) -> None:
         """
         Set of absorption filters
 
@@ -492,12 +497,13 @@ class FilterSet:
         """
         self._filters = filters
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"FilterSet(filters={self.filters})"
 
     @staticmethod
-    def from_materials(materials: list[str], thicknesses: list[float], densities: list[float] = None,
-                       force=False, attn_kw=None, CXRO_kw=None):
+    def from_materials(materials: list[str], thicknesses: list[float], densities: list[float] | None = None,
+                       force: bool = False, attn_kw: dict[str, Any] | None = None,
+                       CXRO_kw: dict[str, Any] | None = None) -> "FilterSet":
         """
         Create FilterSet from materials, thicknesses, and densities
 
@@ -537,18 +543,18 @@ class FilterSet:
 
 
     @property
-    def filters(self):
+    def filters(self) -> list[AbsorptionFilter]:
         return self._filters
 
     @property
-    def material(self):
+    def material(self) -> str:
         return " + ".join([f.material for f in self._filters])
 
     @property
-    def thickness(self):
+    def thickness(self) -> list[float]:
         return [f.thickness for f in self._filters]
 
-    def transmission(self, thickness: list[float] = None, E_ph: np.ndarray = None):
+    def transmission(self, thickness: list[float] | None = None, E_ph: np.ndarray | None = None) -> np.ndarray:
         """
         Calculate X-ray transmission of the filters set
 
@@ -565,8 +571,8 @@ class FilterSet:
         """
         return self.transmission_angle(E_ph=E_ph, angle=0, thickness=thickness).ravel()
 
-    def transmission_angle(self, E_ph: np.ndarray = None, angle: float = 0,
-                           thickness: list[float] = None):
+    def transmission_angle(self, E_ph: np.ndarray | None = None, angle: float = 0,
+                           thickness: list[float] | None = None) -> np.ndarray:
         """
         Calculate transmission with angle
 
@@ -597,7 +603,8 @@ class FilterSet:
         transmissions = [f.transmission_angle(E_ph, angle, t) for f, t in zip(self._filters, thickness)]
         return np.prod(transmissions, axis=0)
 
-    def plot_transmission(self, E_ph: np.ndarray = None, thickness: list[float] = None, ax=None, **kwargs):
+    def plot_transmission(self, E_ph: np.ndarray | None = None, thickness: list[float] | None = None,
+                          ax: plt.Axes | None = None, **kwargs: Any) -> plt.Axes:
         """
         Plot X-ray transmission
 

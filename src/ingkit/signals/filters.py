@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from typing import Literal
 
 import numpy as np
@@ -75,7 +76,7 @@ def _cutoff_check(cutoff_freq: float | list[float], filter_type: FILTER_TYPES
 
 def _iirfilter(y: np.ndarray, cutoff_freq: float | list[float], fs: float, filter_type: FILTER_TYPES,
                axis: int = -1, filter_name: str = 'bessel', order: int = 4, detrend: str | None = None,
-               **kwargs) -> np.ndarray:
+               **kwargs: Any) -> np.ndarray:
     """
     Base function for applying filters to a signal.
     
@@ -129,7 +130,7 @@ def _iirfilter(y: np.ndarray, cutoff_freq: float | list[float], fs: float, filte
 
 def lowpass_filter(y: np.ndarray, cutoff_freq: float, fs: float, axis: int = -1,
                    filter_name: str = 'bessel', order: int = 4, detrend: str | None = None,
-                   **kwargs) -> np.ndarray:
+                   **kwargs: Any) -> np.ndarray:
     """
     Lowpass filter for y(t) with given cutoff frequency (Hz).
 
@@ -171,7 +172,7 @@ def lowpass_filter(y: np.ndarray, cutoff_freq: float, fs: float, axis: int = -1,
 
 def highpass_filter(y: np.ndarray, cutoff_freq: float, fs: float, axis: int = -1,
                     filter_name: str = 'bessel', order: int = 4, detrend: str | None = None,
-                    **kwargs) -> np.ndarray:
+                    **kwargs: Any) -> np.ndarray:
     """
     Highpass filter for y(t) with given cutoff frequency (Hz).
 
@@ -213,7 +214,7 @@ def highpass_filter(y: np.ndarray, cutoff_freq: float, fs: float, axis: int = -1
 
 def bandpass_filter(y: np.ndarray, cutoff_freq: list[float], fs: float, axis: int = -1,
                     filter_name: str = 'bessel', order: int = 4, detrend: str | None = None,
-                    **kwargs) -> np.ndarray:
+                    **kwargs: Any) -> np.ndarray:
     """
     Bandpass filter for y(t) with given cutoff frequencies (Hz).
 
@@ -255,7 +256,7 @@ def bandpass_filter(y: np.ndarray, cutoff_freq: list[float], fs: float, axis: in
 
 def bandstop_filter(y: np.ndarray, cutoff_freq: list[float], fs: float, axis: int = -1,
                     filter_name: str = 'bessel', order: int = 4, detrend: str | None = None,
-                    **kwargs) -> np.ndarray:
+                    **kwargs: Any) -> np.ndarray:
     """
     Bandstop filter for y(t) with given cutoff frequencies (Hz).
 
