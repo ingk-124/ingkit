@@ -1,25 +1,47 @@
-
 # ingkit
 
-Toolkit for signal processing, file I/O, plotting, and more. Built on top of NumPy, SciPy, and Matplotlib.
-This software is released under the MIT License, see LICENSE.txt.
+`ingkit` is a Python utility toolkit for signal processing, file I/O, plotting, and physics-related calculations.
+It is built on top of the scientific Python ecosystem (NumPy / SciPy / Matplotlib).
 
-信号解析、ファイル入出力、プロットなどのツールキット。NumPy、SciPy、Matplotlibを基盤としています。
-このソフトウェアはMITライセンスで公開されています。LICENSE.txtを参照してください。
+`ingkit` は、信号処理・ファイル入出力・可視化・物理計算を支援する Python ツールキットです。
+科学技術計算向けの主要ライブラリ（NumPy / SciPy / Matplotlib）を前提に設計されています。
 
 ## Installation
 
 ```bash
-git clone
+git clone <repository-url>
 cd ingkit
-pip install -e ingkit
+pip install -r requirements.txt
+pip install -e .
 ```
 
-## Packages
+## Package structure
 
-- `ingkit.signal`: Signal processing functions.
-- `ingkit.io`: File input/output functions.
-- `ingkit.physics`: Physical calculations and constants.
-- `ingkit.plot`: Plotting functions for visualizing data.
-- `ingkit.utils`: Utility functions for various tasks.
-- `ingkit.tools`: Tools for this library, such as decorators and context managers.
+- `ingkit.signals`
+  - Signal analysis and filtering utilities.
+- `ingkit.io`
+  - File input/output helpers.
+- `ingkit.physics`
+  - Physics-related modules (including plasma and X-ray utilities).
+- `ingkit.myplot`
+  - Plot styles and colormap utilities.
+- `ingkit.utils`
+  - General-purpose helpers.
+- `ingkit.tools`
+  - Shared types and internal tools.
+- `ingkit.analysis`
+  - Analysis namespace package.
+
+## Demos
+
+Example scripts are available in `demo/`:
+
+- `demo/filter_demo.py`
+- `demo/plot_demo.py`
+- `demo/spectrum_analysis_demo.py`
+
+## License
+
+This project is licensed under the MIT License.
+
+このソフトウェアは MIT License で提供されています。
