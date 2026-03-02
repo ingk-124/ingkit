@@ -19,9 +19,9 @@ def gaunt_factor(Te: float | np.ndarray, ne: float | np.ndarray) -> float | np.n
     Parameters
     ----------
     Te : float or np.ndarray
-        Electron temperature (unit: eV)
+        Electron temperature (eV)
     ne : float or np.ndarray
-        Electron density (unit: m^-3)
+        Electron density (m^-3)
 
     Returns
     -------
@@ -39,18 +39,18 @@ def bremsstrahlung_spectrum(Te: float | np.ndarray, ne: float | np.ndarray, Z_ef
     Parameters
     ----------
     Te : float or np.ndarray
-        Electron temperature (unit: eV)
+        Electron temperature (eV)
     ne : float or np.ndarray
-        Electron density (unit: m^-3)
+        Electron density (m^-3)
     Z_eff : float, optional
         Effective charge state of the plasma (default is 1 for hydrogenic plasma).
     E_ph : float or np.ndarray, optional
-        Photon energy (unit: eV). If not provided, the function will return the spectrum as a function of photon energy.
+        Photon energy (eV). If not provided, the function will return the spectrum as a function of photon energy.
 
     Returns
     -------
     float or np.ndarray
-        The bremsstrahlung spectrum (unit: photons/s/m^3/eV).
+        The bremsstrahlung spectrum (photons/s/m^3/eV).
         The output shape will depend on the input shapes of Te, ne, and E_ph. The last dimension corresponds to the photon energy array E_ph.
     """
 
@@ -78,10 +78,10 @@ def integrate_spectrum(spectra: float | np.ndarray, E_ph: float | np.ndarray,
     Parameters
     ----------
     spectra : float or np.ndarray
-        The bremsstrahlung spectrum (unit: photons/s/m^3/eV) as a function of photon energy.
+        The bremsstrahlung spectrum (photons/s/m^3/eV) as a function of photon energy.
         The last dimension should correspond to the photon energy array E_ph.
     E_ph : float or np.ndarray
-        Photon energy array corresponding to the spectra (unit: eV).
+        Photon energy array corresponding to the spectra (eV).
     transmission : float or np.ndarray, optional
         Transmission function to apply to the spectrum (dimensionless, between 0 and 1). If not provided, no transmission is applied.
         This should be the same shape as E_ph or broadcastable to the shape of spectra.

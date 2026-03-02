@@ -115,19 +115,19 @@ def _get_transmission_data_from_CXRO(material: str, thickness: float, density: f
     thickness : float
         thickness of the material [um]
     density : float, optional
-        material density [g/cm^3] (default: -1)
+        material density [g/cm^3] Default is -1.
     ph_min : float, optional
-        minimum photon energy [eV] (larger than 10) (default: 10)
+        minimum photon energy [eV] (larger than 10) Default is 10.
     ph_max : float, optional
-        maximum photon energy [eV] (smaller than 30000) (default: 30000)
+        maximum photon energy [eV] (smaller than 30000) Default is 30000.
     n_pts : int, optional
-        number of points (maximum: 1000) (default: 1000)
+        number of points (maximum: 1000) Default is 1000.
     ph_scale : str, optional
-        photon energy scale ("log" or "lin") (default: "log")
+        photon energy scale ("log" or "lin") Default is "log".
     save : bool, optional
-        save transmission data (default: True)
+        save transmission data Default is True.
     save_dir : str, optional
-        save directory (default: "./transmission")
+        save directory Default is "./transmission".
 
     Returns
     -------
@@ -213,13 +213,13 @@ def _attenuation_length(material, density=-1, thicknesses=(1e-2, 1e-1, 1, 10),
     material : str
         material name or formula (e.g., "Al", "C22H10N2O5")
     density : float, optional
-        material density [g/cm^3] (default: -1)
+        material density [g/cm^3] Default is -1.
     d1d2 : tuple, optional
-        thickness of the material [um] (default: (1e-2, 5e-2))
+        thickness of the material [um] Default is (1e-2, 5e-2.)
     save : bool, optional
-        save transmission data (default: True)
+        save transmission data Default is True.
     save_dir : str, optional
-        save directory (default: "./att_len")
+        save directory Default is "./att_len".
     CXRO_kw : dict, optional
         keyword arguments for _get_transmission_data_from_CXRO
 
@@ -294,33 +294,33 @@ class AbsorptionFilter:
         thickness : float
             thickness of the material [um]
         density : float, optional
-            material density [g/cm^3]. If density is negative, the density of solid is used (default: -1)
+            material density [g/cm^3]. If density is negative, the density of solid is used Default is -1.
         force : bool, optional
-            force to calculate attenuation length (default: False)
+            force to calculate attenuation length Default is False.
         attn_kw : dict, optional
             keyword arguments for _attenuation_length
             - save : bool, optional
-                save transmission data (default: True)
+                save transmission data Default is True.
             - save_dir : str, optional
-                save directory (default: "./att_len")
+                save directory Default is "./att_len".
             - CXRO_kw : dict, optional
                 keyword arguments for _get_transmission_data_from_CXRO
         CXRO_kw : dict, optional
             keyword arguments for _get_transmission_data_from_CXRO
             - save : bool, optional
-                save transmission data (default: True)
+                save transmission data Default is True.
             - save_dir : str, optional
-                save directory (default: "./transmission")
+                save directory Default is "./transmission".
             - ph_min : float, optional
-                minimum photon energy [eV] (larger than 10) (default: 10)
+                minimum photon energy [eV] (larger than 10) Default is 10.
             - ph_max : float, optional
-                maximum photon energy [eV] (smaller than 30000) (default: 30000)
+                maximum photon energy [eV] (smaller than 30000) Default is 30000.
             - n_pts : int, optional
-                number of points (maximum: 1000) (default: 1000)
+                number of points (maximum: 1000) Default is 1000.
             - ph_scale : str, optional
-                photon energy scale ("log" or "lin") (default: "log")
+                photon energy scale ("log" or "lin") Default is "log".
             - force : bool, optional
-                force to calculate transmission data (default: False)
+                force to calculate transmission data Default is False.
 
         Notes
         -----
@@ -419,7 +419,7 @@ class AbsorptionFilter:
         angle : float or np.ndarray, optional
             angle [rad]
         squeeze : bool, optional
-            if True, squeeze the output array (default: True)
+            if True, squeeze the output array Default is True.
 
         Returns
         -------
@@ -508,15 +508,15 @@ class FilterSet:
         thicknesses : list of float
             list of thicknesses of the materials [um]
         densities : list of float, optional
-            list of material densities [g/cm^3]. If density is negative, the density of solid is used (default: None)
+            list of material densities [g/cm^3]. If density is negative, the density of solid is used Default is None.
         force : bool, optional
-            force to calculate attenuation length (default: False)
+            force to calculate attenuation length Default is False.
         attn_kw : dict, optional
             keyword arguments for _attenuation_length
             - save : bool, optional
-                save transmission data (default: True)
+                save transmission data Default is True.
             - save_dir : str, optional
-                save directory (default: "./att_len")
+                save directory Default is "./att_len".
             - CXRO_kw : dict, optional
                 keyword arguments for _get_transmission_data_from_CXRO
         CXRO_kw : dict, optional
