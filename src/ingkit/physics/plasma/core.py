@@ -42,7 +42,7 @@ def _Te_eV(Te_J: float | np.ndarray) -> float | np.ndarray:
 
 # Frequencies
 
-def f_pe(ne: float | np.ndarray) -> float | np.ndarray:
+def plasma_frequency(ne: float | np.ndarray) -> float | np.ndarray:
     """
     Calculate the electron plasma frequency.
 
@@ -59,7 +59,7 @@ def f_pe(ne: float | np.ndarray) -> float | np.ndarray:
     return np.sqrt(ne * e ** 2 / (epsilon_0 * m_e)) / (2 * np.pi)
 
 
-def f_pi(ni: float | np.ndarray, Z: int = 1, A: int = 1) -> float | np.ndarray:
+def ion_plasma_frequency(ni: float | np.ndarray, Z: int = 1, A: int = 1) -> float | np.ndarray:
     """
     Calculate the ion plasma frequency.
 
@@ -106,7 +106,7 @@ def cyclotron_frequency(B: float | np.ndarray, q: float = e, m: float = m_e) -> 
     return q * B / (2 * np.pi * m)
 
 
-def f_ce(B: float | np.ndarray) -> float | np.ndarray:
+def electron_cyclotron_frequency(B: float | np.ndarray) -> float | np.ndarray:
     """
     Calculate the electron cyclotron frequency.
 
@@ -123,7 +123,7 @@ def f_ce(B: float | np.ndarray) -> float | np.ndarray:
     return cyclotron_frequency(B, q=e, m=m_e)
 
 
-def f_ci(B: float | np.ndarray, Z: int = 1, A: int = 1) -> float | np.ndarray:
+def ion_cyclotron_frequency(B: float | np.ndarray, Z: int = 1, A: int = 1) -> float | np.ndarray:
     """
     Calculate the ion cyclotron frequency.
 
@@ -145,8 +145,8 @@ def f_ci(B: float | np.ndarray, Z: int = 1, A: int = 1) -> float | np.ndarray:
     return cyclotron_frequency(B, q=Z * e, m=m_i)
 
 
-def f_lh(B: float | np.ndarray, ne: float | np.ndarray, Z: int = 1, A: int = 1
-         ) -> float | np.ndarray:
+def lower_hybrid_frequency(B: float | np.ndarray, ne: float | np.ndarray, Z: int = 1, A: int = 1
+                           ) -> float | np.ndarray:
     """
     Calculate the lower hybrid frequency.
 
@@ -170,13 +170,17 @@ def f_lh(B: float | np.ndarray, ne: float | np.ndarray, Z: int = 1, A: int = 1
     -----
     The lower hybrid frequency is a characteristic frequency in magnetized plasmas, associated with the coupling of ion and electron motions.
     """
-    _f_ce = f_ce(B)
-    _f_ci = f_ci(B, Z, A)
-    _f_pe = f_pe(ne)
-    return np.sqrt(_f_ci * _f_ce / (1 + _f_pe ** 2 / _f_ce ** 2))
+    _f_ce = electron_cyclotron_frequency(B)
+    _f_ci = ion_cyclotron_frequency(B, Z, A)
+    _f_pi = ion_plasma_frequency(ne, Z, A)
+    omega_ce = 2 * np.pi * _f_ce
+    omega_ci = 2 * np.pi * _f_ci
+    omega_pi = 2 * np.pi * _f_pi
+    omega = 1 / np.sqrt(omega_pi ** (-2) + 1 / (omega_ce * omega_ci))
+    return omega / (2 * np.pi)
 
 
-def f_uh(B: float | np.ndarray, ne: float | np.ndarray) -> float | np.ndarray:
+def upper_hybrid_frequency(B: float | np.ndarray, ne: float | np.ndarray) -> float | np.ndarray:
     """
     Calculate the upper hybrid frequency.
 
@@ -196,8 +200,8 @@ def f_uh(B: float | np.ndarray, ne: float | np.ndarray) -> float | np.ndarray:
     -----
     The upper hybrid frequency is a characteristic frequency in magnetized plasmas, associated with the coupling of electron motion and plasma oscillations.
     """
-    _f_ce = f_ce(B)
-    _f_pe = f_pe(ne)
+    _f_ce = electron_cyclotron_frequency(B)
+    _f_pe = plasma_frequency(ne)
     return np.sqrt(_f_ce ** 2 + _f_pe ** 2)
 
 
@@ -219,7 +223,7 @@ def o_mode_cutoff_f(ne: float | np.ndarray) -> float | np.ndarray:
     -----
     The O-mode: Electric field oscillates parallel to the magnetic field.
     """
-    return f_pe(ne)
+    return plasma_frequency(ne)
 
 
 def x_mode_cutoff_f(ne: float | np.ndarray, B: float | np.ndarray) -> float | np.ndarray:
@@ -242,8 +246,8 @@ def x_mode_cutoff_f(ne: float | np.ndarray, B: float | np.ndarray) -> float | np
     -----
     The X-mode: Electric field oscillates perpendicular to the magnetic field.
     """
-    _f_ce = f_ce(B)
-    _f_pe = f_pe(ne)
+    _f_ce = electron_cyclotron_frequency(B)
+    _f_pe = plasma_frequency(ne)
     return 0.5 * (_f_ce + np.sqrt(_f_ce ** 2 + 4 * _f_pe ** 2))
 
 
