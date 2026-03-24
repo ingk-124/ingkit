@@ -437,7 +437,7 @@ class AbsorptionFilter:
         The thickness of the material is corrected by the cosine of the angle.
         At angles close to zero, the transmittance deviates from the actual value because refraction cannot be ignored.
         """
-        angle = np.clip(np.atleast_1d(angle), 0, np.pi / 2 - 1e-3)  # avoid angles close to pi/2
+        angle = np.clip(np.abs(np.atleast_1d(angle)), 0, np.pi / 2 - 1e-3)  # avoid angles close to pi/2
         angle_dim = angle.ndim
 
         thickness = self._thickness if thickness is None else thickness

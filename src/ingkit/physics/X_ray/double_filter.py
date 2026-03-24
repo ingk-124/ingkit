@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import matplotlib.pyplot as plt
 from typing import Callable
-import numpy as np
-from scipy.interpolate import LinearNDInterpolator, interp1d
 
+import matplotlib.pyplot as plt
+import numpy as np
 from ingkit.physics.X_ray import AbsorptionFilter, FilterSet
 from ingkit.physics.plasma import brems
+from scipy.interpolate import LinearNDInterpolator, interp1d
 
 
 class DoubleFilter:
@@ -61,7 +61,7 @@ class DoubleFilter:
         filter2 = AbsorptionFilter(material=material2, thickness=thickness2)
         return DoubleFilter(filter1, filter2, E_ph=photon_energy)
 
-    def transmissions(self, E_ph: np.ndarray, angle: float = 0.0, squeeze: bool = True                      ) -> np.ndarray:
+    def transmissions(self, E_ph: np.ndarray = None, angle: float = 0.0, squeeze: bool = True) -> np.ndarray:
         """
         Calculate the transmissions of both filters at given photon energies.
 
@@ -79,6 +79,7 @@ class DoubleFilter:
         [trans1, trans2] : np.ndarray
             Transmissions of filter1 and filter2 at the specified photon energies.
         """
+        E_ph = self.E_ph if E_ph is None else E_ph  # in eV
         trans1 = self.filter1.transmission_angle(E_ph=E_ph, angle=angle, squeeze=squeeze)
         trans2 = self.filter2.transmission_angle(E_ph=E_ph, angle=angle, squeeze=squeeze)
         return trans1, trans2
@@ -113,9 +114,9 @@ class DoubleFilter:
         spectrum_dim = spectrum.ndim
         trans1, trans2 = self.transmissions(E_ph=E_ph, angle=angle, squeeze=False)  # (*angle_shape, n_Eph)
 
-        spectrum = np.expand_dims(spectrum, axis=tuple(range(-angle_dim-1, -1)))  # (*TnZ_shape, 1, ..., n_Eph)
-        trans1 = np.expand_dims(trans1, axis=tuple(range(spectrum_dim-1)))  # (1, ..., *angle_shape, n_Eph)
-        trans2 = np.expand_dims(trans2, axis=tuple(range(spectrum_dim-1)))  # (1, ..., *angle_shape, n_Eph)
+        spectrum = np.expand_dims(spectrum, axis=tuple(range(-angle_dim - 1, -1)))  # (*TnZ_shape, 1, ..., n_Eph)
+        trans1 = np.expand_dims(trans1, axis=tuple(range(spectrum_dim - 1)))  # (1, ..., *angle_shape, n_Eph)
+        trans2 = np.expand_dims(trans2, axis=tuple(range(spectrum_dim - 1)))  # (1, ..., *angle_shape, n_Eph)
         intensity1 = brems.integrate_spectrum(spectra=spectrum, E_ph=E_ph,
                                               transmission=trans1)  # (*TnZ_shape, *angle_shape)
         intensity2 = brems.integrate_spectrum(spectra=spectrum, E_ph=E_ph,
@@ -126,25 +127,6 @@ class DoubleFilter:
                          E_ph: np.ndarray = None,
                          angle: float | np.ndarray = 0.0
                          ) -> tuple[np.ndarray, np.ndarray]:
-        # """
-        # Calculate the intensity ratios of the two filters over a range of electron temperatures.
-        #
-        # Parameters
-        # ----------
-        # Te : float or np.ndarray
-        #     Electron temperature in eV.
-        # E_ph : np.ndarray
-        #     Photon energy array in eV.
-        # angle : float | np.ndarray
-        #     Angle of incidence in radians. Default is 0 (normal incidence).
-        #
-        # Returns
-        # -------
-        # ratio_12 : np.ndarray
-        #     Intensity ratio of filter2 to filter1.
-        # ratio_21 : np.ndarray
-        #     Intensity ratio of filter1 to filter2.
-        # """
         """
         Calculate the intensity ratios of the two filters over a range of electron temperatures.
 
@@ -256,7 +238,7 @@ class DoubleFilter:
             return lambda ratio, angle: self._Te_from_ratio[1](ratio, angle)
 
     def set_Te_from_ratio(self, Te: float | np.ndarray = None,
-                          E_photon: np.ndarray = None,
+                          E_ph: np.ndarray = None,
                           angle: float | np.ndarray = 0.0) -> None:
         """
         Set the function to get electron temperature from intensity ratio.
@@ -265,17 +247,17 @@ class DoubleFilter:
         ----------
         Te: float or np.ndarray
             Electron temperature in eV.
-        E_photon: np.ndarray
+        E_ph: np.ndarray
             Photon energy array in eV.
         angle: float | np.ndarray
             Angle of incidence in radians. Default is 0 (normal incidence).
         """
         Te = np.linspace(10, 1e3, 100) if Te is None else Te  # in eV
-        E_photon = self.E_ph if E_photon is None else E_photon  # in eV
+        E_ph = self.E_ph if E_ph is None else E_ph  # in eV
 
         if isinstance(angle, (int, float)):
             # only one angle, no need for 2D interpolation
-            ratio_12, ratio_21 = self.intensity_ratios(Te=Te, E_ph=E_photon, angle=angle)
+            ratio_12, ratio_21 = self.intensity_ratios(Te=Te, E_ph=E_ph, angle=angle)
             if len(ratio_12) < 2 or len(ratio_21) < 2:
                 self._Te_from_ratio = None
                 return
@@ -286,7 +268,7 @@ class DoubleFilter:
         elif isinstance(angle, (list, tuple, np.ndarray)):
             angle = np.asarray(angle)
             TT, AA = np.meshgrid(np.insert(Te, 0, 0), angle, indexing='ij')  # (N_Te, N_angle)
-            ratio_12, ratio_21 = self.intensity_ratios(Te=Te, E_ph=E_photon, angle=angle)
+            ratio_12, ratio_21 = self.intensity_ratios(Te=Te, E_ph=E_ph, angle=angle)
             ratio_12 = ratio_12 if ratio_12.ndim == 2 else ratio_12[:, None]  # (N_Te, N_angle)
             ratio_21 = ratio_21 if ratio_21.ndim == 2 else ratio_21[:, None]  # (N_Te, N_angle)
             if len(ratio_12) < 2 or len(ratio_21) < 2:
