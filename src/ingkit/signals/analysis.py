@@ -91,7 +91,7 @@ def coherence_analysis(x: np.ndarray, y: np.ndarray, fs: float, **kwargs: Any) -
     fs : float
         The sampling frequency of the signals.
     **kwargs : Any
-        Additional keyword arguments to pass to scipy.signal.coherence.
+        Additional keyword arguments to pass to scipy.signal.welch and scipy.signal.csd.
 
     Returns
     -------
