@@ -1,5 +1,5 @@
 ## figure
-figure.figsize  : 6, 4
+figure.figsize  : 8, 6
 savefig.format: pdf
 figure.dpi: 200
 
@@ -35,7 +35,7 @@ lines.markeredgewidth: 1.2
 
 ## legend
 legend.fancybox   : False
-legend.framealpha : 1
+legend.framealpha : 0.8
 legend.edgecolor  :  black
 
 axes.prop_cycle : cycler('color', ['red','blue','green','orange','purple'])
