@@ -1,5 +1,5 @@
 ## figure
-figure.figsize  : 8, 6
+figure.figsize  : 6, 4
 savefig.format: pdf
 figure.dpi: 200
 
