@@ -38,4 +38,4 @@ legend.fancybox   : False
 legend.framealpha : 0.8
 legend.edgecolor  :  black
 
-axes.prop_cycle : cycler('color', ['red','blue','green','orange','purple'])
+axes.prop_cycle : cycler('color', ['magenta','cyan','lime','orange','purple'])

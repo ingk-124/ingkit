@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 from scipy import signal
+from scipy.ndimage import uniform_filter1d
 
 __all__ = ["ens_N", "nperseg_from_ens", "coherence_analysis", "sliding_window_coherence",
            "param_from_df_window", "param_from_df_ens", "param_from_window_ens", "resolutions"]
@@ -213,7 +214,8 @@ def coherence_analysis(x: np.ndarray, y: np.ndarray, fs: float, nperseg: int = N
 
 def sliding_window_coherence(x: np.ndarray, y: np.ndarray, fs: float | int, nperseg: int, noverlap: int,
                              seg_per_win: int = None, seg_step: int = None,
-                             win_param: tuple[str, Any] = None, **kwargs: Any):
+                             win_param: tuple[str, Any] = None,
+                             freq_smooth_bins: int | None = None, **kwargs: Any):
     """
     Calculate time-resolved coherence between two signals using a Short-Time Fourier Transform (STFT).
 
@@ -235,6 +237,9 @@ def sliding_window_coherence(x: np.ndarray, y: np.ndarray, fs: float | int, nper
         The number of segments to slide the window for each step. If None, it will be set to half of segment_per_window.
     win_param : tuple[str, Any], optional
         Parameters for the window function used in STFT. If None, it will use a default Hann window.
+    freq_smooth_bins : int, optional
+        Width of a uniform smoothing filter along the frequency axis. No
+        frequency smoothing is applied when omitted.
     kwargs : Any
         Additional keyword arguments to pass to the STFT calculation.
 
@@ -300,6 +305,16 @@ def sliding_window_coherence(x: np.ndarray, y: np.ndarray, fs: float | int, nper
     Pxx_sliding = sliding_window_view(Pxx, seg_per_win, axis=-1)[..., ::seg_step, :].mean(axis=-1)
     Pyy_sliding = sliding_window_view(Pyy, seg_per_win, axis=-1)[..., ::seg_step, :].mean(axis=-1)
     Cxy_sliding = sliding_window_view(Cxy, seg_per_win, axis=-1)[..., ::seg_step, :].mean(axis=-1)
+
+    if freq_smooth_bins is not None:
+        if not isinstance(freq_smooth_bins, (int, np.integer)):
+            raise TypeError("freq_smooth_bins must be an integer")
+        if freq_smooth_bins < 1:
+            raise ValueError("freq_smooth_bins must be positive")
+        # STFT output is (..., frequency, time), so frequency is axis -2.
+        Pxx_sliding = uniform_filter1d(Pxx_sliding, freq_smooth_bins, axis=-2)
+        Pyy_sliding = uniform_filter1d(Pyy_sliding, freq_smooth_bins, axis=-2)
+        Cxy_sliding = uniform_filter1d(Cxy_sliding, freq_smooth_bins, axis=-2)
 
     coh2_sliding = (np.abs(Cxy_sliding) ** 2) / (Pxx_sliding * Pyy_sliding)
     phase_sliding = np.angle(Cxy_sliding)

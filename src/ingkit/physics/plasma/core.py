@@ -205,6 +205,68 @@ def upper_hybrid_frequency(B: float | np.ndarray, ne: float | np.ndarray) -> flo
     return np.sqrt(_f_ce ** 2 + _f_pe ** 2)
 
 
+def alfven_speed(B: float | np.ndarray, ne: float | np.ndarray,
+                 mi: float = m_p) -> float | np.ndarray:
+    """
+    Calculate the Alfvén speed.
+
+    Parameters
+    ----------
+    B : float or np.ndarray
+        Magnetic field strength (Tesla)
+    ne : float or np.ndarray
+        Electron density (m^-3)
+    mi : float, optional
+        Ion mass (default is proton mass m_p)
+
+    Returns
+    -------
+    float or np.ndarray
+        The Alfvén speed (m/s).
+
+    Notes
+    -----
+    The Alfvén speed v_A is defined as:
+    v_A = B / sqrt(mu_0 * n_e * m_i)
+    where mu_0 is the vacuum permeability, n_e is the electron density, and m_i is the ion mass.
+    It represents the speed at which Alfvén waves propagate in a magnetized plasma.
+    """
+    return B / np.sqrt(mu_0 * ne * mi)
+
+
+def Alfven_speed(B: float | np.ndarray, ne: float | np.ndarray,
+                 mi: float = m_p) -> float | np.ndarray:
+    """Compatibility alias for :func:`alfven_speed`."""
+    return alfven_speed(B, ne, mi=mi)
+
+
+def ion_sound_speed(Te: float | np.ndarray, mi: float = m_p) -> float | np.ndarray:
+    """
+    Calculate the ion sound speed.
+
+    Parameters
+    ----------
+    Te : float or np.ndarray
+        Electron temperature (eV)
+    mi : float, optional
+        Ion mass (default is proton mass m_p)
+
+    Returns
+    -------
+    float or np.ndarray
+        The ion sound speed (m/s).
+
+    Notes
+    -----
+    The ion sound speed c_s is defined as:
+    c_s = sqrt(k_B * T_e / m_i)
+    where k_B is the Boltzmann constant, T_e is the electron temperature in Joules, and m_i is the ion mass.
+    It represents the speed at which ion acoustic waves propagate in a plasma.
+    """
+    Te_J = _Te_J(Te)  # Convert Te from eV to Joules
+    return np.sqrt(Te_J / mi)
+
+
 def o_mode_cutoff_f(ne: float | np.ndarray) -> float | np.ndarray:
     """
     Calculate the O-mode cutoff frequency.
