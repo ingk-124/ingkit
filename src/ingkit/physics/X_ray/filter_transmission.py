@@ -2,9 +2,10 @@
 # calculate X-ray transmission
 import re
 import time
+import warnings
 from itertools import combinations
 from pathlib import Path
-from typing import Any, Literal, Union
+from typing import Any, Literal, Protocol, Union, runtime_checkable
 
 import numpy as np
 import requests
@@ -16,6 +17,8 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 
+from ingkit.physics.plasma import brems
+
 ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1.2 Safari/605.1.15'
 options = webdriver.ChromeOptions()
 options.add_argument(ua)
@@ -23,13 +26,81 @@ options.add_argument('headless')
 FILE_LOC = Path(__file__).parent
 
 
-def _calc_att_length_from_sf(photon_energy: np.ndarray, f2: np.ndarray, num_density: float) -> np.ndarray:
+@runtime_checkable
+class FilterLike(Protocol):
+    """Structural interface shared by X-ray filter-like objects."""
+
+    @property
+    def E_ph(self) -> np.ndarray: ...
+
+    @property
+    def material(self) -> str: ...
+
+    @property
+    def thickness(self) -> float | list[float]: ...
+
+    def transmission(self, E_ph: np.ndarray | None = None,
+                     thickness: Any | None = None) -> np.ndarray: ...
+
+    def transmission_angle(self, E_ph: np.ndarray | None = None,
+                           angle: np.ndarray | float = 0,
+                           thickness: Any | None = None,
+                           squeeze: bool = True) -> np.ndarray: ...
+
+    def intensity(self, Te: float | np.ndarray, ne: float = 5e18,
+                  Z_eff: float = 1.0, E_ph: np.ndarray | None = None,
+                  angle: np.ndarray | float = 0) -> np.ndarray: ...
+
+    def temperature_response(self, Te: np.ndarray, ne: float = 5e18,
+                             Z_eff: float = 1.0, E_ph: np.ndarray | None = None,
+                             angle: np.ndarray | float = 0) -> np.ndarray: ...
+
+
+def _filter_intensity(filter_: FilterLike, Te: float | np.ndarray, ne: float,
+                      Z_eff: float, E_ph: np.ndarray | None,
+                      angle: np.ndarray | float) -> np.ndarray:
+    """Integrate a bremsstrahlung spectrum through a filter-like object."""
+    E_ph = filter_.E_ph if E_ph is None else E_ph
+    angle = np.atleast_1d(angle)
+    spectrum = brems.bremsstrahlung_spectrum(Te=Te, ne=ne, Z_eff=Z_eff, E_ph=E_ph)
+    transmission = filter_.transmission_angle(E_ph=E_ph, angle=angle, squeeze=False)
+
+    spectrum_dim = spectrum.ndim
+    spectrum = np.expand_dims(spectrum, axis=tuple(range(-angle.ndim - 1, -1)))
+    transmission = np.expand_dims(transmission, axis=tuple(range(spectrum_dim - 1)))
+    intensity = brems.integrate_spectrum(
+        spectra=spectrum, E_ph=E_ph, transmission=transmission
+    )
+    return intensity.squeeze()
+
+
+def _temperature_response(filter_: FilterLike, Te: np.ndarray, ne: float,
+                          Z_eff: float, E_ph: np.ndarray | None,
+                          angle: np.ndarray | float) -> np.ndarray:
+    """Calculate d ln(intensity) / d ln(Te) along the temperature axis."""
+    Te = np.asarray(Te, dtype=float)
+    if Te.ndim != 1 or Te.size < 2:
+        raise ValueError("Te must be a one-dimensional array with at least two values")
+    if np.any(Te <= 0):
+        raise ValueError("Te must contain only positive values")
+
+    intensity = np.asarray(
+        filter_.intensity(Te=Te, ne=ne, Z_eff=Z_eff, E_ph=E_ph, angle=angle)
+    )
+    edge_order = 2 if Te.size >= 3 else 1
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.gradient(
+            np.log(intensity), np.log(Te), axis=0, edge_order=edge_order
+        )
+
+
+def _calc_att_length_from_sf(E_ph: np.ndarray, f2: np.ndarray, num_density: float) -> np.ndarray:
     """
     Calculate X-ray attenuation length from atomic scattering factor (imaginary part)
 
     Parameters
     ----------
-    photon_energy : np.ndarray (n,)
+    E_ph : np.ndarray (n,)
         photon energy [eV]
     f2 : np.ndarray (n,)
         atomic scattering factor (imaginary part)
@@ -50,21 +121,22 @@ def _calc_att_length_from_sf(photon_energy: np.ndarray, f2: np.ndarray, num_dens
     and N is the number density of the material.
     `E_ph` and `f2` should be the same length.
     """
-    Lambda = constants.h * constants.c / (photon_energy * constants.e)  # [m]
+    Lambda = constants.h * constants.c / (E_ph * constants.e)  # [m]
     r_0 = constants.physical_constants["classical electron radius"][0]  # [m]
     mu_a = 2 * r_0 * Lambda * f2  # [m^-1]
     with np.errstate(divide='ignore'):
         att_len = 1 / (num_density * mu_a)  # [m]
-    return np.array([photon_energy, att_len * 1e6]).T
+    return np.array([E_ph, att_len * 1e6]).T
 
 
-def _calc_att_length_from_transmission(photon_energy: np.ndarray, thicknesses: list[float], transmissions: np.ndarray) -> np.ndarray:
+def _calc_att_length_from_transmission(E_ph: np.ndarray, thicknesses: list[float],
+                                       transmissions: np.ndarray) -> np.ndarray:
     """
     Calculate X-ray attenuation length from transmission data
 
     Parameters
     ----------
-    photon_energy : np.ndarray (n,)
+    E_ph : np.ndarray (n,)
         photon energy [eV]
     thicknesses : list of float
         thickness of the material [um]
@@ -98,7 +170,7 @@ def _calc_att_length_from_transmission(photon_energy: np.ndarray, thicknesses: l
     arr = np.array(att_len_list)  # (m, n)
     arr[~np.isfinite(arr) | (arr <= 0)] = np.nan
     att_len = np.nanmedian(arr, axis=0)  # (n,)
-    return np.array([photon_energy, att_len]).T
+    return np.array([E_ph, att_len]).T
 
 
 def _get_transmission_data_from_CXRO(material: str, thickness: float, density: float = -1,
@@ -271,10 +343,10 @@ def _attenuation_length(material: str, density: float = -1,
             CXRO_kw.setdefault("save", save)
             res = [_get_transmission_data_from_CXRO(material, thickness=d, density=density, **CXRO_kw) for d in
                    thicknesses]
-            photon_energy = res[0][0][:, 0]  # (n,)
+            E_ph = res[0][0][:, 0]  # (n,)
             transmission_data = np.array([_[0][:, 1] for _ in res])  # (len(thicknesses), n)
             info = res[0][1]
-            data = _calc_att_length_from_transmission(photon_energy, np.array(thicknesses), transmission_data)
+            data = _calc_att_length_from_transmission(E_ph, np.array(thicknesses), transmission_data)
         if save:
             save_dir.mkdir(exist_ok=True, parents=True)
             header = (f"material={material} density={density}\n"
@@ -452,6 +524,35 @@ class AbsorptionFilter:
         transmission = transmission.squeeze() if squeeze else transmission
         return np.clip(transmission, 0, 1)  # just in case of numerical errors
 
+    def intensity(self, Te: float | np.ndarray, ne: float = 5e18,
+                  Z_eff: float = 1.0, E_ph: np.ndarray | None = None,
+                  angle: np.ndarray | float = 0) -> np.ndarray:
+        """Calculate bremsstrahlung intensity transmitted by this filter.
+
+        Parameters
+        ----------
+        Te : float or np.ndarray
+            Electron temperature [eV].
+        ne : float, optional
+            Electron density [m^-3].
+        Z_eff : float, optional
+            Effective ion charge.
+        E_ph : np.ndarray, optional
+            Photon energy grid [eV].
+        angle : float or np.ndarray, optional
+            Angle of incidence [rad].
+        """
+        return _filter_intensity(self, Te, ne, Z_eff, E_ph, angle)
+
+    def temperature_response(self, Te: np.ndarray, ne: float = 5e18,
+                             Z_eff: float = 1.0, E_ph: np.ndarray | None = None,
+                             angle: np.ndarray | float = 0) -> np.ndarray:
+        """Calculate ``d ln(intensity) / d ln(Te)``.
+
+        ``Te`` must be a positive one-dimensional array with at least two values.
+        """
+        return _temperature_response(self, Te, ne, Z_eff, E_ph, angle)
+
     def plot_transmission(self, E_ph: np.ndarray | None = None, thickness: float | None = None,
                           ax: plt.Axes | None = None, **kwargs: Any) -> plt.Axes:
         """
@@ -495,7 +596,9 @@ class FilterSet:
         -----
         The transmission of the filters set is calculated as the product of the transmission of each filters.
         """
-        self._filters = filters
+        if not filters:
+            raise ValueError("filters must contain at least one AbsorptionFilter")
+        self._filters = list(filters)
 
     def __repr__(self) -> str:
         return f"FilterSet(filters={self.filters})"
@@ -547,6 +650,24 @@ class FilterSet:
         return self._filters
 
     @property
+    def E_ph(self) -> np.ndarray:
+        """Photon-energy grid shared by all component filters.
+
+        Raises
+        ------
+        ValueError
+            If the component filters use different photon-energy grids.
+        """
+        E_ph = self._filters[0].E_ph
+        for index, filter_ in enumerate(self._filters[1:], start=1):
+            if not np.array_equal(E_ph, filter_.E_ph):
+                raise ValueError(
+                    "FilterSet component E_ph arrays do not match: "
+                    f"filters[0] and filters[{index}] use different grids"
+                )
+        return E_ph
+
+    @property
     def material(self) -> str:
         return " + ".join([f.material for f in self._filters])
 
@@ -554,7 +675,8 @@ class FilterSet:
     def thickness(self) -> list[float]:
         return [f.thickness for f in self._filters]
 
-    def transmission(self, thickness: list[float] | None = None, E_ph: np.ndarray | None = None) -> np.ndarray:
+    def transmission(self, E_ph: np.ndarray | None = None,
+                     thickness: list[float] | float | None = None) -> np.ndarray:
         """
         Calculate X-ray transmission of the filters set
 
@@ -562,6 +684,8 @@ class FilterSet:
         ----------
         E_ph : np.ndarray, optional
             photon energy [eV]
+        thickness : list of float or float, optional
+            Thickness of each filter [um]. A scalar is applied to every filter.
 
         Returns
         -------
@@ -569,10 +693,30 @@ class FilterSet:
             X-ray transmission
             If `E_ph` is None, the transmission is calculated for the photon energy of the first filters.
         """
-        return self.transmission_angle(E_ph=E_ph, angle=0, thickness=thickness).ravel()
+        # Before 0.1.0 the positional order was (thickness, E_ph). Preserve
+        # unambiguous calls while making the common interface (E_ph, thickness).
+        if E_ph is not None and thickness is not None:
+            first = np.asarray(E_ph)
+            second = np.asarray(thickness)
+            old_order = (
+                (first.ndim == 0 and second.ndim > 0)
+                or (first.ndim > 0 and first.size == len(self._filters)
+                    and second.ndim > 0 and second.size != len(self._filters))
+            )
+            if old_order:
+                warnings.warn(
+                    "FilterSet.transmission(thickness, E_ph) is deprecated; "
+                    "use transmission(E_ph, thickness) or keyword arguments",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                E_ph, thickness = thickness, E_ph
+        return self.transmission_angle(E_ph=E_ph, angle=0, thickness=thickness)
 
-    def transmission_angle(self, E_ph: np.ndarray | None = None, angle: float = 0,
-                           thickness: list[float] | None = None) -> np.ndarray:
+    def transmission_angle(self, E_ph: np.ndarray | None = None,
+                           angle: np.ndarray | float = 0,
+                           thickness: list[float] | float | None = None,
+                           squeeze: bool = True) -> np.ndarray:
         """
         Calculate transmission with angle
 
@@ -580,15 +724,17 @@ class FilterSet:
         ----------
         E_ph : np.ndarray (n,)
             photon energy [eV]
-        angle : float
+        angle : float or np.ndarray
             angle [rad]
-        thickness : list of float, optional
-            thickness of each filters [um]
+        thickness : list of float or float, optional
+            Thickness of each filter [um]. A scalar is applied to every filter.
+        squeeze : bool, optional
+            If True, squeeze singleton dimensions from the result.
 
         Returns
         -------
-        transmission : np.ndarray (n, m)
-            transmission
+        transmission : np.ndarray
+            Transmission with shape ``angle.shape + E_ph.shape`` before optional squeezing.
 
         Notes
         -----
@@ -599,9 +745,44 @@ class FilterSet:
             thickness = [f.thickness for f in self._filters]
         elif isinstance(thickness, (int, float)):
             thickness = [thickness] * len(self._filters)
-        E_ph = self._filters[0].E_ph if E_ph is None else E_ph
-        transmissions = [f.transmission_angle(E_ph, angle, t) for f, t in zip(self._filters, thickness)]
-        return np.prod(transmissions, axis=0)
+        if len(thickness) != len(self._filters):
+            raise ValueError("thickness must have the same length as filters")
+        E_ph = self.E_ph if E_ph is None else E_ph
+        transmissions = [
+            f.transmission_angle(E_ph=E_ph, angle=angle, thickness=t, squeeze=False)
+            for f, t in zip(self._filters, thickness)
+        ]
+        transmission = np.prod(transmissions, axis=0)
+        return transmission.squeeze() if squeeze else transmission
+
+    def intensity(self, Te: float | np.ndarray, ne: float = 5e18,
+                  Z_eff: float = 1.0, E_ph: np.ndarray | None = None,
+                  angle: np.ndarray | float = 0) -> np.ndarray:
+        """Calculate bremsstrahlung intensity transmitted by this filter set.
+
+        Parameters
+        ----------
+        Te : float or np.ndarray
+            Electron temperature [eV].
+        ne : float, optional
+            Electron density [m^-3].
+        Z_eff : float, optional
+            Effective ion charge.
+        E_ph : np.ndarray, optional
+            Photon energy grid [eV].
+        angle : float or np.ndarray, optional
+            Angle of incidence [rad].
+        """
+        return _filter_intensity(self, Te, ne, Z_eff, E_ph, angle)
+
+    def temperature_response(self, Te: np.ndarray, ne: float = 5e18,
+                             Z_eff: float = 1.0, E_ph: np.ndarray | None = None,
+                             angle: np.ndarray | float = 0) -> np.ndarray:
+        """Calculate ``d ln(intensity) / d ln(Te)``.
+
+        ``Te`` must be a positive one-dimensional array with at least two values.
+        """
+        return _temperature_response(self, Te, ne, Z_eff, E_ph, angle)
 
     def plot_transmission(self, E_ph: np.ndarray | None = None, thickness: list[float] | None = None,
                           ax: plt.Axes | None = None, **kwargs: Any) -> plt.Axes:
@@ -622,7 +803,7 @@ class FilterSet:
         if ax is None:
             fig, ax = plt.subplots()
 
-        E_ph = self._filters[0].E_ph if E_ph is None else E_ph
+        E_ph = self.E_ph if E_ph is None else E_ph
         thickness = [f.thickness for f in self._filters] if thickness is None else thickness
         if len(thickness) != len(self._filters):
             raise ValueError("thickness must be a list of the same length as the number of filters")

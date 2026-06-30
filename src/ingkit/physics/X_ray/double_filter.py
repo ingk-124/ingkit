@@ -4,25 +4,27 @@ from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
-from ingkit.physics.X_ray import AbsorptionFilter, FilterSet
-from ingkit.physics.plasma import brems
 from scipy.interpolate import LinearNDInterpolator, interp1d
+
+from .filter_transmission import AbsorptionFilter, FilterLike
 
 
 class DoubleFilter:
     def __init__(self,
-                 filter1: AbsorptionFilter | FilterSet,
-                 filter2: AbsorptionFilter | FilterSet,
-                 E_ph: np.ndarray = None) -> None:
+                 filter1: FilterLike,
+                 filter2: FilterLike,
+                 E_ph: np.ndarray | None = None) -> None:
         """
         Class to calculate the intensity ratios of two X-ray filters over a range of electron temperatures.
 
         Parameters
         ----------
-        filter1: AbsorptionFilter | FilterSet
-        filter2: AbsorptionFilter | FilterSet
-        E_ph: np.ndarray
-            Photon energy array in eV. If None, defaults to np.linspace(0, 3e5, 3000).
+        filter1 : FilterLike
+            First X-ray filter-like object.
+        filter2 : FilterLike
+            Second X-ray filter-like object.
+        E_ph : np.ndarray, optional
+            Photon energy array in eV. If None, a logarithmic grid up to 3e5 eV is included.
         """
 
         self.filter1 = filter1
@@ -35,7 +37,7 @@ class DoubleFilter:
     @staticmethod
     def from_materials(material1: str, thickness1: float,
                        material2: str, thickness2: float,
-                       photon_energy: np.ndarray = None) -> "DoubleFilter":
+                       E_ph: np.ndarray | None = None) -> "DoubleFilter":
         """
         Create DoubleFilter from materials and thicknesses.
 
@@ -49,9 +51,8 @@ class DoubleFilter:
             Material of filter2.
         thickness2: float
             Thickness of filter2 in micrometers.
-        photon_energy: np.ndarray
-            Photon energy array in eV. If None, defaults to np.linspace(0,
-            3e4, 1000).
+        E_ph : np.ndarray, optional
+            Photon energy array in eV.
 
         Returns
         -------
@@ -59,9 +60,11 @@ class DoubleFilter:
         """
         filter1 = AbsorptionFilter(material=material1, thickness=thickness1)
         filter2 = AbsorptionFilter(material=material2, thickness=thickness2)
-        return DoubleFilter(filter1, filter2, E_ph=photon_energy)
+        return DoubleFilter(filter1, filter2, E_ph=E_ph)
 
-    def transmissions(self, E_ph: np.ndarray = None, angle: float = 0.0, squeeze: bool = True) -> np.ndarray:
+    def transmissions(self, E_ph: np.ndarray | None = None,
+                      angle: float | np.ndarray = 0.0,
+                      squeeze: bool = True) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculate the transmissions of both filters at given photon energies.
 
@@ -76,7 +79,7 @@ class DoubleFilter:
 
         Returns
         -------
-        [trans1, trans2] : np.ndarray
+        trans1, trans2 : tuple of np.ndarray
             Transmissions of filter1 and filter2 at the specified photon energies.
         """
         E_ph = self.E_ph if E_ph is None else E_ph  # in eV
@@ -86,7 +89,7 @@ class DoubleFilter:
 
     def intensities(self,
                     Te: float | np.ndarray, ne: float = 5e18, Z_eff: float = 1.0,
-                    E_ph: np.ndarray = None,
+                    E_ph: np.ndarray | None = None,
                     angle: float | np.ndarray = 0.0) -> tuple[np.ndarray, np.ndarray]:
         """
         Calculate the intensities of both filters over a range of electron temperatures.
@@ -107,24 +110,31 @@ class DoubleFilter:
         intensity2 : np.ndarray
             Intensity through filter2.
         """
-        E_ph = self.E_ph if E_ph is None else E_ph  # in eV (n_Eph)
-        angle = np.atleast_1d(angle)  # angle_shape = (n_angle, (m_angle, ...)) unknown shape
-        angle_dim = angle.ndim
-        spectrum = brems.bremsstrahlung_spectrum(Te=Te, ne=ne, Z_eff=Z_eff, E_ph=E_ph)  # (*TnZ_shape, n_Eph)
-        spectrum_dim = spectrum.ndim
-        trans1, trans2 = self.transmissions(E_ph=E_ph, angle=angle, squeeze=False)  # (*angle_shape, n_Eph)
+        E_ph = self.E_ph if E_ph is None else E_ph
+        intensity1 = self.filter1.intensity(
+            Te=Te, ne=ne, Z_eff=Z_eff, E_ph=E_ph, angle=angle
+        )
+        intensity2 = self.filter2.intensity(
+            Te=Te, ne=ne, Z_eff=Z_eff, E_ph=E_ph, angle=angle
+        )
+        return intensity1, intensity2
 
-        spectrum = np.expand_dims(spectrum, axis=tuple(range(-angle_dim - 1, -1)))  # (*TnZ_shape, 1, ..., n_Eph)
-        trans1 = np.expand_dims(trans1, axis=tuple(range(spectrum_dim - 1)))  # (1, ..., *angle_shape, n_Eph)
-        trans2 = np.expand_dims(trans2, axis=tuple(range(spectrum_dim - 1)))  # (1, ..., *angle_shape, n_Eph)
-        intensity1 = brems.integrate_spectrum(spectra=spectrum, E_ph=E_ph,
-                                              transmission=trans1)  # (*TnZ_shape, *angle_shape)
-        intensity2 = brems.integrate_spectrum(spectra=spectrum, E_ph=E_ph,
-                                              transmission=trans2)  # (*TnZ_shape, *angle_shape)
-        return intensity1.squeeze(), intensity2.squeeze()  # (*TnZ_shape, *angle_shape)
+    def temperature_response(
+            self, Te: np.ndarray, ne: float = 5e18, Z_eff: float = 1.0,
+            E_ph: np.ndarray | None = None,
+            angle: float | np.ndarray = 0.0) -> tuple[np.ndarray, np.ndarray]:
+        """Calculate ``d ln(intensity) / d ln(Te)`` for both filters."""
+        E_ph = self.E_ph if E_ph is None else E_ph
+        response1 = self.filter1.temperature_response(
+            Te=Te, ne=ne, Z_eff=Z_eff, E_ph=E_ph, angle=angle
+        )
+        response2 = self.filter2.temperature_response(
+            Te=Te, ne=ne, Z_eff=Z_eff, E_ph=E_ph, angle=angle
+        )
+        return response1, response2
 
     def intensity_ratios(self, Te: float | np.ndarray,
-                         E_ph: np.ndarray = None,
+                         E_ph: np.ndarray | None = None,
                          angle: float | np.ndarray = 0.0
                          ) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -137,8 +147,6 @@ class DoubleFilter:
         E_ph : np.ndarray, optional
             Photon energy array (eV). Default is None.
             If None, the function will use the photon energy array defined in the DoubleFilter instance.
-        angleE_ph : np.ndarray, optional
-            Photon energy array (eV). If None, the instance photon energy array is used. Default is None.
         angle : float or np.ndarray, optional
             Angle of incidence (radians). Default is 0.
 
@@ -154,7 +162,8 @@ class DoubleFilter:
         ratio_21 = intensity1 / intensity2
         return ratio_12, ratio_21
 
-    def plot_ratios(self, Te: float | np.ndarray = None, E_photon: np.ndarray = None, angle: float = 0.0
+    def plot_ratios(self, Te: float | np.ndarray | None = None,
+                    E_ph: np.ndarray | None = None, angle: float = 0.0
                     ) -> tuple[plt.Figure, plt.Axes, plt.Axes]:
         """
         Plot the intensity ratios of the two filters over a range of electron temperatures.
@@ -163,13 +172,13 @@ class DoubleFilter:
         ----------
         Te : float or np.ndarray
             Electron temperature in eV.
-        E_photon : np.ndarray
+        E_ph : np.ndarray
             Photon energy array in eV.
         """
         Te = np.linspace(10, 300, 100) if Te is None else Te
-        E_photon = self.E_ph if E_photon is None else E_photon
-        intensity1, intensity2 = self.intensities(Te=Te, E_ph=E_photon, angle=angle)
-        ratio_12, ratio_21 = self.intensity_ratios(Te=Te, E_ph=E_photon, angle=angle)
+        E_ph = self.E_ph if E_ph is None else E_ph
+        intensity1, intensity2 = self.intensities(Te=Te, E_ph=E_ph, angle=angle)
+        ratio_12, ratio_21 = self.intensity_ratios(Te=Te, E_ph=E_ph, angle=angle)
 
         fig, ax = plt.subplots()
         l1 = ax.plot(Te, intensity1, "C0-",
@@ -237,8 +246,8 @@ class DoubleFilter:
         else:
             return lambda ratio, angle: self._Te_from_ratio[1](ratio, angle)
 
-    def set_Te_from_ratio(self, Te: float | np.ndarray = None,
-                          E_ph: np.ndarray = None,
+    def set_Te_from_ratio(self, Te: float | np.ndarray | None = None,
+                          E_ph: np.ndarray | None = None,
                           angle: float | np.ndarray = 0.0) -> None:
         """
         Set the function to get electron temperature from intensity ratio.
@@ -301,14 +310,14 @@ if __name__ == "__main__":
 
     double_filter = DoubleFilter(poly_25um_w_Al, poly_125um_w_Al, E_ph=None)
     Te = np.linspace(10, 2500, 100)  # in eV
-    # fig, ax, ax2 = double_filter.plot_ratios(Te=Te, E_photon=None)
+    # fig, ax, ax2 = double_filter.plot_ratios(Te=Te, E_ph=None)
     # ax2.set_ylim(0, 5)
     # plt.show()
 
     # for filter_a, filter_b in combinations([poly_25um_w_Al, poly_50um_w_Al, poly_75um_w_Al, poly_125um_w_Al], 2):
     #     double_filter = DoubleFilter(filter_a, filter_b, E_ph=None)
     #     Te = np.linspace(10, 2500, 100)  # in eV
-    #     fig, ax, ax2 = double_filter.plot_ratios(Te=Te, E_photon=None)
+    #     fig, ax, ax2 = double_filter.plot_ratios(Te=Te, E_ph=None)
     #     ax2.set_ylim(0, 5)
     #
     #     fig.savefig(f"DoubleFilter_{filter_a.filters[0].material}_{filter_a.filters[0].thickness}um_"
@@ -320,9 +329,9 @@ if __name__ == "__main__":
     #                 dpi=300, bbox_inches='tight')
     #     plt.show()
     #     plt.close(fig)
-    fig, ax, ax2 = double_filter.plot_ratios(Te=Te, E_photon=None)
+    fig, ax, ax2 = double_filter.plot_ratios(Te=Te, E_ph=None)
     ax2.set_ylim(0, 5)
-    double_filter.set_Te_from_ratio(Te=Te, E_photon=None, angle=0)
+    double_filter.set_Te_from_ratio(Te=Te, E_ph=None, angle=0)
     ratio_test = np.array([0.1, 0.5, 1.0, 2.0, 5.0])
     Te_from_ratio12 = double_filter.Te_from_ratio12(ratio_test, angle=0.0)
     Te_from_ratio21 = double_filter.Te_from_ratio21(ratio_test, angle=0.0)
