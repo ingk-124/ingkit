@@ -1,0 +1,41 @@
+## figure
+figure.figsize  : 6, 4
+savefig.format: pdf
+figure.dpi: 200
+
+## font
+font.size       : 12
+# axes.titlesize  : large
+
+## axes
+axes.grid       : False
+xtick.direction : in
+ytick.direction : in
+xtick.top   : True
+ytick.right : True
+
+xtick.major.pad : 8
+xtick.minor.pad : 8
+ytick.major.pad : 8
+ytick.minor.pad : 8
+xtick.major.width : 1
+xtick.minor.width : 0.8
+xtick.major.size : 5
+xtick.minor.size : 3
+ytick.major.width : 1
+ytick.minor.width : 0.8
+ytick.major.size : 5
+ytick.minor.size : 3
+
+## lines
+lines.linewidth  : 1.2
+lines.markersize : 5
+markers.fillstyle: none
+lines.markeredgewidth: 1.2
+
+## legend
+legend.fancybox   : False
+legend.framealpha : 0.8
+legend.edgecolor  :  black
+
+axes.prop_cycle : cycler('color', ['red','blue','green','orange','purple'])
