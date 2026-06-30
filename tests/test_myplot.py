@@ -14,3 +14,10 @@ def test_style_wrapper_functions():
     assert "my_default" in myplot.styles.available_styles(user=True)
 
     myplot.use_style("default")
+
+
+def test_my_default2_color_cycle():
+    params = myplot.styles.get_rcParams("my_default2")
+    colors = params["axes.prop_cycle"].by_key()["color"]
+
+    assert colors == ["magenta", "cyan", "lime", "orange", "purple"]
