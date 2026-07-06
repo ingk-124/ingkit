@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator, interp1d
 
-from .filter_transmission import AbsorptionFilter, FilterLike
+from .filter_transmission import AbsorptionFilter, FilterLike, FilterSet
 
 
 class DoubleFilter:
@@ -152,15 +152,15 @@ class DoubleFilter:
 
         Returns
         -------
-        ratio_12 : np.ndarray
-            Intensity ratio of filter2 to filter1.
-        ratio_21 : np.ndarray
-            Intensity ratio of filter1 to filter2.
+        ratio_1over2 : np.ndarray
+            Intensity ratio of filter1 to filter2 (filter1 / filter2).
+        ratio_2over1 : np.ndarray
+            Intensity ratio of filter2 to filter1 (filter2 / filter1).
         """
         intensity1, intensity2 = self.intensities(Te=Te, E_ph=E_ph, angle=angle)  # (N_Te,) or (N_Te, angle)
-        ratio_12 = intensity2 / intensity1
-        ratio_21 = intensity1 / intensity2
-        return ratio_12, ratio_21
+        ratio_1over2 = intensity1 / intensity2
+        ratio_2over1 = intensity2 / intensity1
+        return ratio_1over2, ratio_2over1
 
     def plot_ratios(self, Te: float | np.ndarray | None = None,
                     E_ph: np.ndarray | None = None, angle: float = 0.0
@@ -178,7 +178,7 @@ class DoubleFilter:
         Te = np.linspace(10, 300, 100) if Te is None else Te
         E_ph = self.E_ph if E_ph is None else E_ph
         intensity1, intensity2 = self.intensities(Te=Te, E_ph=E_ph, angle=angle)
-        ratio_12, ratio_21 = self.intensity_ratios(Te=Te, E_ph=E_ph, angle=angle)
+        ratio_1over2, ratio_2over1 = self.intensity_ratios(Te=Te, E_ph=E_ph, angle=angle)
 
         fig, ax = plt.subplots()
         l1 = ax.plot(Te, intensity1, "C0-",
@@ -191,10 +191,10 @@ class DoubleFilter:
         ax.set_ylim(0, None)
 
         ax2 = ax.twinx()
-        l3 = ax2.plot(Te, ratio_12, "r--",
+        l3 = ax2.plot(Te, ratio_2over1, "r--",
                       label=f"{self.filter2.material} ({self.filter2.thickness} um) / "
                             f"{self.filter1.material} ({self.filter1.thickness} um)")
-        l4 = ax2.plot(Te, ratio_21, "k--",
+        l4 = ax2.plot(Te, ratio_1over2, "k--",
                       label=f"{self.filter1.material} ({self.filter1.thickness} um) / "
                             f"{self.filter2.material} ({self.filter2.thickness} um)")
         ax2.set_ylabel("Intensity Ratio")
@@ -209,7 +209,7 @@ class DoubleFilter:
         return fig, ax, ax2
 
     @property
-    def Te_from_ratio12(self) -> Callable[..., float | np.ndarray | None]:
+    def Te_from_2over1(self) -> Callable[..., float | np.ndarray | None]:
         """
         Function to get electron temperature from intensity ratio (filter2 / filter1).
 
@@ -228,7 +228,7 @@ class DoubleFilter:
             return lambda ratio, angle: self._Te_from_ratio[0](ratio, angle)
 
     @property
-    def Te_from_ratio21(self) -> Callable[..., float | np.ndarray | None]:
+    def Te_from_1over2(self) -> Callable[..., float | np.ndarray | None]:
         """
         Function to get electron temperature from intensity ratio (filter1 / filter2).
 
@@ -333,12 +333,12 @@ if __name__ == "__main__":
     ax2.set_ylim(0, 5)
     double_filter.set_Te_from_ratio(Te=Te, E_ph=None, angle=0)
     ratio_test = np.array([0.1, 0.5, 1.0, 2.0, 5.0])
-    Te_from_ratio12 = double_filter.Te_from_ratio12(ratio_test, angle=0.0)
-    Te_from_ratio21 = double_filter.Te_from_ratio21(ratio_test, angle=0.0)
+    Te_from_ratio12 = double_filter.Te_from_2over1(ratio_test, angle=0.0)
+    Te_from_ratio21 = double_filter.Te_from_1over2(ratio_test, angle=0.0)
     print("Ratio (filter2/filter1):", ratio_test)
     print("Te from ratio (filter2/filter1):", Te_from_ratio12)
     print("Te from ratio (filter1/filter2):", Te_from_ratio21)
     ratio12_from_Te = double_filter.intensity_ratios(Te=Te_from_ratio12, angle=0.0)[0]
     ratio21_from_Te = double_filter.intensity_ratios(Te=Te_from_ratio21, angle=0.0)[1]
-    print("Ratio from Te_from_ratio12:", ratio12_from_Te)
-    print("Ratio from Te_from_ratio21:", ratio21_from_Te)
+    print("Ratio from Te_from_2over1:", ratio12_from_Te)
+    print("Ratio from Te_from_1over2:", ratio21_from_Te)
