@@ -18,6 +18,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 
 from ingkit.physics.plasma import brems
+from ingkit.tools import type_check
 
 ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1.2 Safari/605.1.15'
 options = webdriver.ChromeOptions()
@@ -60,14 +61,15 @@ def _filter_intensity(filter_: FilterLike, Te: float | np.ndarray, ne: float,
                       Z_eff: float, E_ph: np.ndarray | None,
                       angle: np.ndarray | float) -> np.ndarray:
     """Integrate a bremsstrahlung spectrum through a filter-like object."""
-    E_ph = filter_.E_ph if E_ph is None else E_ph
-    angle = np.atleast_1d(angle)
+    E_ph = type_check.as_numeric_vector(
+        filter_.E_ph if E_ph is None else E_ph, name="E_ph"
+    )
+    angle = type_check.as_numeric_array(angle, min_ndim=1, name="angle")
     spectrum = brems.bremsstrahlung_spectrum(Te=Te, ne=ne, Z_eff=Z_eff, E_ph=E_ph)
     transmission = filter_.transmission_angle(E_ph=E_ph, angle=angle, squeeze=False)
-
-    spectrum_dim = spectrum.ndim
-    spectrum = np.expand_dims(spectrum, axis=tuple(range(-angle.ndim - 1, -1)))
-    transmission = np.expand_dims(transmission, axis=tuple(range(spectrum_dim - 1)))
+    spectrum, transmission = type_check.align_last_axis_for_broadcast(
+        spectrum, transmission, name="spectrum and transmission"
+    )
     intensity = brems.integrate_spectrum(
         spectra=spectrum, E_ph=E_ph, transmission=transmission
     )
@@ -78,15 +80,19 @@ def _temperature_response(filter_: FilterLike, Te: np.ndarray, ne: float,
                           Z_eff: float, E_ph: np.ndarray | None,
                           angle: np.ndarray | float) -> np.ndarray:
     """Calculate d ln(intensity) / d ln(Te) along the temperature axis."""
-    Te = np.asarray(Te, dtype=float)
-    if Te.ndim != 1 or Te.size < 2:
+    Te = type_check.as_numeric_vector(Te, name="Te")
+    if Te.size < 2:
         raise ValueError("Te must be a one-dimensional array with at least two values")
     if np.any(Te <= 0):
         raise ValueError("Te must contain only positive values")
 
-    intensity = np.asarray(
-        filter_.intensity(Te=Te, ne=ne, Z_eff=Z_eff, E_ph=E_ph, angle=angle)
+    intensity = type_check.as_numeric_array(
+        filter_.intensity(Te=Te, ne=ne, Z_eff=Z_eff, E_ph=E_ph, angle=angle),
+        min_ndim=1,
+        name="intensity",
     )
+    if intensity.shape[0] != Te.size:
+        raise ValueError("intensity must have Te along its first axis")
     edge_order = 2 if Te.size >= 3 else 1
     with np.errstate(divide="ignore", invalid="ignore"):
         return np.gradient(
@@ -509,17 +515,22 @@ class AbsorptionFilter:
         The thickness of the material is corrected by the cosine of the angle.
         At angles close to zero, the transmittance deviates from the actual value because refraction cannot be ignored.
         """
-        angle = np.clip(np.abs(np.atleast_1d(angle)), 0, np.pi / 2 - 1e-3)  # avoid angles close to pi/2
-        angle_dim = angle.ndim
-
-        thickness = self._thickness if thickness is None else thickness
-        E_ph = self._E_ph if E_ph is None else E_ph
+        angle = type_check.as_numeric_array(angle, min_ndim=1, name="angle")
+        angle = np.clip(np.abs(angle), 0, np.pi / 2 - 1e-3)
+        thickness = type_check.as_numeric_array(
+            self._thickness if thickness is None else thickness,
+            ndim=0,
+            name="thickness",
+        )
+        E_ph = type_check.as_numeric_vector(
+            self._E_ph if E_ph is None else E_ph, name="E_ph"
+        )
 
         att_len = self.interpolate(E_ph)  # [um] (n_Eph,)
         thickness_eff = thickness / np.cos(angle)  # [um] (m, ...)
 
-        att_len = np.expand_dims(att_len, axis=tuple(range(angle_dim)))  # (m, ..., n_Eph)
-        thickness_eff = np.expand_dims(thickness_eff, axis=-1)  # (m, ..., 1)
+        att_len = att_len.reshape((1,) * angle.ndim + att_len.shape)
+        thickness_eff = thickness_eff[..., None]
         transmission = np.exp(-thickness_eff / att_len)  # (m, ..., n_Eph)
         transmission = transmission.squeeze() if squeeze else transmission
         return np.clip(transmission, 0, 1)  # just in case of numerical errors
@@ -742,12 +753,16 @@ class FilterSet:
         At angles close to zero, the transmittance deviates from the actual value because refraction cannot be ignored.
         """
         if thickness is None:
-            thickness = [f.thickness for f in self._filters]
-        elif isinstance(thickness, (int, float)):
-            thickness = [thickness] * len(self._filters)
-        if len(thickness) != len(self._filters):
+            thickness = type_check.as_numeric_vector(self.thickness, name="thickness")
+        elif type_check.is_number(thickness):
+            thickness = np.full(len(self._filters), thickness, dtype=float)
+        else:
+            thickness = type_check.as_numeric_vector(thickness, name="thickness")
+        if thickness.size != len(self._filters):
             raise ValueError("thickness must have the same length as filters")
-        E_ph = self.E_ph if E_ph is None else E_ph
+        E_ph = type_check.as_numeric_vector(
+            self.E_ph if E_ph is None else E_ph, name="E_ph"
+        )
         transmissions = [
             f.transmission_angle(E_ph=E_ph, angle=angle, thickness=t, squeeze=False)
             for f, t in zip(self._filters, thickness)

@@ -33,6 +33,20 @@ def test_filter_set_supports_unambiguous_legacy_positional_order(filters):
     np.testing.assert_allclose(legacy, current)
 
 
+def test_filter_set_normalizes_numpy_scalar_thickness(filters):
+    _, _, aluminium_set = filters
+    E_ph = np.array([1_000.0, 2_000.0, 3_000.0])
+
+    scalar = aluminium_set.transmission_angle(
+        E_ph=E_ph, angle=np.float64(0.2), thickness=np.float64(0.5)
+    )
+    explicit = aluminium_set.transmission_angle(
+        E_ph=E_ph, angle=0.2, thickness=[0.5, 0.5]
+    )
+
+    np.testing.assert_allclose(scalar, explicit)
+
+
 def test_absorption_filter_and_filter_set_intensity(filters):
     aluminium, _, aluminium_set = filters
     E_ph = np.array([1_000.0, 2_000.0, 3_000.0])
