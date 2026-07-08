@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import LinearNDInterpolator, interp1d
 
+from ingkit.tools import type_check
+
 from .filter_transmission import AbsorptionFilter, FilterLike, FilterSet
 
 
@@ -30,6 +32,7 @@ class DoubleFilter:
         self.filter1 = filter1
         self.filter2 = filter2
         E_ph_default = np.logspace(0, np.log10(3e5), 3000) if E_ph is None else E_ph
+        E_ph_default = type_check.as_numeric_vector(E_ph_default, name="E_ph")
         _E_ph = np.union1d(np.union1d(filter1.E_ph, filter2.E_ph), E_ph_default)  # in eV
         self.E_ph = np.unique(_E_ph)  # in eV, sorted unique photon energy array for both filters and the default range
         self._Te_from_ratio = None  # function to get Te from ratio
@@ -261,10 +264,14 @@ class DoubleFilter:
         angle: float | np.ndarray
             Angle of incidence in radians. Default is 0 (normal incidence).
         """
-        Te = np.linspace(10, 1e3, 100) if Te is None else Te  # in eV
-        E_ph = self.E_ph if E_ph is None else E_ph  # in eV
+        Te = type_check.as_numeric_vector(
+            np.linspace(10, 1e3, 100) if Te is None else Te, name="Te"
+        )
+        E_ph = type_check.as_numeric_vector(
+            self.E_ph if E_ph is None else E_ph, name="E_ph"
+        )
 
-        if isinstance(angle, (int, float)):
+        if type_check.is_number(angle):
             # only one angle, no need for 2D interpolation
             ratio_12, ratio_21 = self.intensity_ratios(Te=Te, E_ph=E_ph, angle=angle)
             if len(ratio_12) < 2 or len(ratio_21) < 2:
@@ -274,12 +281,16 @@ class DoubleFilter:
                 self._Te_from_ratio = (interp1d(ratio_12, Te, bounds_error=False, fill_value=np.nan),
                                        interp1d(ratio_21, Te, bounds_error=False, fill_value=np.nan))
                 return
-        elif isinstance(angle, (list, tuple, np.ndarray)):
-            angle = np.asarray(angle)
+        else:
+            angle = type_check.as_numeric_vector(angle, name="angle")
             TT, AA = np.meshgrid(np.insert(Te, 0, 0), angle, indexing='ij')  # (N_Te, N_angle)
             ratio_12, ratio_21 = self.intensity_ratios(Te=Te, E_ph=E_ph, angle=angle)
-            ratio_12 = ratio_12 if ratio_12.ndim == 2 else ratio_12[:, None]  # (N_Te, N_angle)
-            ratio_21 = ratio_21 if ratio_21.ndim == 2 else ratio_21[:, None]  # (N_Te, N_angle)
+            ratio_12 = type_check.as_numeric_array(
+                ratio_12, name="ratio_1over2"
+            ).reshape(Te.size, -1)
+            ratio_21 = type_check.as_numeric_array(
+                ratio_21, name="ratio_2over1"
+            ).reshape(Te.size, -1)
             if len(ratio_12) < 2 or len(ratio_21) < 2:
                 self._Te_from_ratio = None
                 return
@@ -293,8 +304,6 @@ class DoubleFilter:
                                    LinearNDInterpolator(points21, TT.ravel(),
                                                         fill_value=np.nan, rescale=True))
             return
-        else:
-            raise ValueError("angle must be a float, list, tuple, or np.ndarray.")
 
 
 if __name__ == "__main__":

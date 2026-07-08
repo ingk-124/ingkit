@@ -57,7 +57,10 @@ def bremsstrahlung_spectrum(Te: float | np.ndarray, ne: float | np.ndarray, Z_ef
     if E_ph is None:
         Te_max = np.max(Te)
         E_ph = np.logspace(0, np.log10(Te_max * 10), 100)  # Generate photon energy array if not provided
-    E_ph = np.atleast_1d(E_ph)
+    E_ph = type_check.as_numeric_vector(E_ph, name="E_ph")
+    Te = type_check.as_numeric_array(Te, name="Te")
+    ne = type_check.as_numeric_array(ne, name="ne")
+    Z_eff = type_check.as_numeric_array(Z_eff, name="Z_eff")
 
     # Te = np.nan_to_num(Te, nan=0.01)
     # ne = np.nan_to_num(ne, nan=0)
@@ -66,7 +69,7 @@ def bremsstrahlung_spectrum(Te: float | np.ndarray, ne: float | np.ndarray, Z_ef
 
     factor_arr = factor * ne ** 2 * Z_eff / np.sqrt(Te) * gaunt_factor(Te, ne)
     spectrum = factor_arr[..., None] * np.exp(-E_ph / Te[..., None])
-    return spectrum.squeeze()
+    return spectrum
 
 
 def integrate_spectrum(spectra: float | np.ndarray, E_ph: float | np.ndarray,
@@ -90,11 +93,18 @@ def integrate_spectrum(spectra: float | np.ndarray, E_ph: float | np.ndarray,
     -------
 
     """
+    spectra = type_check.as_numeric_array(spectra, min_ndim=1, name="spectra")
+    E_ph = type_check.as_numeric_vector(E_ph, name="E_ph")
+    if spectra.shape[-1] != E_ph.size:
+        raise ValueError("spectra must have the same last-axis length as E_ph")
+
     if transmission is None:
         transmission = np.ones_like(E_ph)
     else:
-        transmission = type_check.ensure_array_like_of_float(transmission)
-    if transmission.shape[-1] != E_ph.shape[0]:
+        transmission = type_check.as_numeric_array(
+            transmission, min_ndim=1, name="transmission"
+        )
+    if transmission.shape[-1] != E_ph.size:
         raise ValueError("Transmission array must have the same length as E_ph.")
 
     spectra = spectra * transmission

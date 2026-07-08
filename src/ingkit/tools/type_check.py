@@ -270,3 +270,87 @@ def ensure_array_like_of_number(x: Any, dtype=np.float64) -> np.ndarray:
         If at least one element of x is not a number (integer or float).
     """
     return _ensure_array_like_of(x, is_number, "number", dtype=dtype)
+
+
+def as_numeric_array(
+        x: Any,
+        *,
+        dtype: Any = np.float64,
+        ndim: int | None = None,
+        min_ndim: int = 0,
+        name: str = "value",
+) -> np.ndarray:
+    """Validate numeric input and normalize it to a NumPy array.
+
+    Unlike :func:`ensure_array_like_of_number`, scalar input is accepted.
+    Singleton axes are prepended when ``min_ndim`` exceeds the input rank.
+
+    Parameters
+    ----------
+    x : Any
+        Numeric scalar or array-like input.
+    dtype : data-type, optional
+        Output dtype.
+    ndim : int, optional
+        Required number of dimensions after normalization.
+    min_ndim : int, optional
+        Minimum number of dimensions. Missing axes are prepended.
+    name : str, optional
+        Input name used in error messages.
+    """
+    if ndim is not None and ndim < 0:
+        raise ValueError("ndim must be non-negative")
+    if min_ndim < 0:
+        raise ValueError("min_ndim must be non-negative")
+    if ndim is not None and min_ndim > ndim:
+        raise ValueError("min_ndim cannot exceed ndim")
+
+    values = _as_object_array(x)
+    if not all(is_number(value) for value in values.ravel()):
+        raise TypeError(f"{name} must contain only real numbers")
+
+    array = np.asarray(x, dtype=dtype)
+    if array.ndim < min_ndim:
+        array = array.reshape((1,) * (min_ndim - array.ndim) + array.shape)
+    if ndim is not None and array.ndim != ndim:
+        raise ValueError(f"{name} must be {ndim}-dimensional; got {array.ndim}")
+    return array
+
+
+def as_numeric_vector(
+        x: Any,
+        *,
+        dtype: Any = np.float64,
+        name: str = "value",
+) -> np.ndarray:
+    """Normalize a numeric scalar or one-dimensional input to a vector."""
+    return as_numeric_array(x, dtype=dtype, ndim=1, min_ndim=1, name=name)
+
+
+def align_last_axis_for_broadcast(
+        left: np.ndarray,
+        right: np.ndarray,
+        *,
+        name: str = "arrays",
+) -> tuple[np.ndarray, np.ndarray]:
+    """Align two arrays for an outer broadcast while preserving the last axis.
+
+    For inputs shaped ``left_shape + (n,)`` and ``right_shape + (n,)``,
+    the returned shapes are ``left_shape + ones(right.ndim - 1) + (n,)``
+    and ``ones(left.ndim - 1) + right_shape + (n,)``.
+    """
+    left = np.asarray(left)
+    right = np.asarray(right)
+    if left.ndim < 1 or right.ndim < 1:
+        raise ValueError(f"{name} must each have at least one dimension")
+    if left.shape[-1] != right.shape[-1]:
+        raise ValueError(
+            f"{name} must have matching last-axis lengths; "
+            f"got {left.shape[-1]} and {right.shape[-1]}"
+        )
+
+    left_leading = left.ndim - 1
+    right_leading = right.ndim - 1
+    left = left.reshape(left.shape[:-1] + (1,) * right_leading + left.shape[-1:])
+    right = right.reshape((1,) * left_leading + right.shape)
+    return left, right
