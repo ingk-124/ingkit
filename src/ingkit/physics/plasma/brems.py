@@ -31,6 +31,18 @@ def gaunt_factor(Te: float | np.ndarray, ne: float | np.ndarray) -> float | np.n
     return (np.sqrt(3) / np.pi) * coulomb_logarithm(Te, ne)
 
 
+def bremsstrahlung_prefactor(Te: float | np.ndarray, ne: float | np.ndarray,
+                             Z_eff: float | np.ndarray = 1.) -> float | np.ndarray:
+    """Calculate the photon-energy-independent bremsstrahlung prefactor."""
+    Te = type_check.as_numeric_array(Te, name="Te")
+    ne = type_check.as_numeric_array(ne, name="ne")
+    Z_eff = type_check.as_numeric_array(Z_eff, name="Z_eff")
+
+    Te = np.maximum(Te, 0.01)
+    ne = np.maximum(ne, 0)
+    return factor * ne ** 2 * Z_eff / np.sqrt(Te) * gaunt_factor(Te, ne)
+
+
 def bremsstrahlung_spectrum(Te: float | np.ndarray, ne: float | np.ndarray, Z_eff: float = 1.,
                             E_ph: float | np.ndarray = None) -> float | np.ndarray:
     """
@@ -58,16 +70,8 @@ def bremsstrahlung_spectrum(Te: float | np.ndarray, ne: float | np.ndarray, Z_ef
         Te_max = np.max(Te)
         E_ph = np.logspace(0, np.log10(Te_max * 10), 100)  # Generate photon energy array if not provided
     E_ph = type_check.as_numeric_vector(E_ph, name="E_ph")
-    Te = type_check.as_numeric_array(Te, name="Te")
-    ne = type_check.as_numeric_array(ne, name="ne")
-    Z_eff = type_check.as_numeric_array(Z_eff, name="Z_eff")
-
-    # Te = np.nan_to_num(Te, nan=0.01)
-    # ne = np.nan_to_num(ne, nan=0)
-    Te = np.maximum(Te, 0.01)  # Avoid division by zero or negative temperatures
-    ne = np.maximum(ne, 0)  # Avoid negative densities
-
-    factor_arr = factor * ne ** 2 * Z_eff / np.sqrt(Te) * gaunt_factor(Te, ne)
+    Te = np.maximum(type_check.as_numeric_array(Te, name="Te"), 0.01)
+    factor_arr = bremsstrahlung_prefactor(Te, ne, Z_eff)
     spectrum = factor_arr[..., None] * np.exp(-E_ph / Te[..., None])
     return spectrum
 

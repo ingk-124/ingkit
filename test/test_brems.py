@@ -16,6 +16,17 @@ def test_bremsstrahlung_spectrum_preserves_photon_energy_axis():
     assert temperature_vector.shape == (2, 3)
 
 
+def test_bremsstrahlung_prefactor_preserves_spectrum_factorization():
+    E_ph = np.array([100.0, 200.0, 300.0])
+    Te = np.array([100.0, 200.0])
+    ne = 1e18
+
+    spectrum = brems.bremsstrahlung_spectrum(Te, ne, E_ph=E_ph)
+    expected = brems.bremsstrahlung_prefactor(Te, ne)[..., None] * np.exp(-E_ph / Te[..., None])
+
+    np.testing.assert_allclose(spectrum, expected)
+
+
 def test_integrate_spectrum_accepts_integer_transmission():
     E_ph = np.array([100.0, 200.0, 300.0])
     spectrum = np.ones(3)
