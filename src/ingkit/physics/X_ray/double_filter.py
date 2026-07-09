@@ -122,6 +122,39 @@ class DoubleFilter:
         )
         return intensity1, intensity2
 
+    def set_intensity_response(self, Te: np.ndarray | None = None,
+                               E_ph: np.ndarray | None = None,
+                               angle: float | np.ndarray = 0.0) -> None:
+        """Precompute transmitted-intensity response tables for both filters."""
+        E_ph = self.E_ph if E_ph is None else E_ph
+        self.filter1.set_intensity_response(Te=Te, E_ph=E_ph, angle=angle)
+        self.filter2.set_intensity_response(Te=Te, E_ph=E_ph, angle=angle)
+
+    def intensities_points_from_response(
+            self, Te: float | np.ndarray, ne: float | np.ndarray = 5e18,
+            Z_eff: float | np.ndarray = 1.0,
+            angle: float | np.ndarray = 0.0) -> tuple[np.ndarray, np.ndarray]:
+        """Evaluate pointwise intensities for both filters using precomputed responses."""
+        intensity1 = self.filter1.intensity_points_from_response(
+            Te=Te, ne=ne, Z_eff=Z_eff, angle=angle
+        )
+        intensity2 = self.filter2.intensity_points_from_response(
+            Te=Te, ne=ne, Z_eff=Z_eff, angle=angle
+        )
+        return intensity1, intensity2
+
+    def intensity_ratios_points_from_response(
+            self, Te: float | np.ndarray, ne: float | np.ndarray = 5e18,
+            Z_eff: float | np.ndarray = 1.0,
+            angle: float | np.ndarray = 0.0) -> tuple[np.ndarray, np.ndarray]:
+        """Evaluate pointwise filter ratios using precomputed responses."""
+        intensity1, intensity2 = self.intensities_points_from_response(
+            Te=Te, ne=ne, Z_eff=Z_eff, angle=angle
+        )
+        ratio_1over2 = intensity1 / intensity2
+        ratio_2over1 = intensity2 / intensity1
+        return ratio_1over2, ratio_2over1
+
     def temperature_response(
             self, Te: np.ndarray, ne: float = 5e18, Z_eff: float = 1.0,
             E_ph: np.ndarray | None = None,
@@ -226,9 +259,9 @@ class DoubleFilter:
         if self._Te_from_ratio is None:
             return lambda *args, **kwargs: None
         if isinstance(self._Te_from_ratio[0], interp1d):
-            return lambda ratio, angle: self._Te_from_ratio[0](ratio)
+            return lambda ratio, angle: self._Te_from_ratio[1](ratio)
         else:
-            return lambda ratio, angle: self._Te_from_ratio[0](ratio, angle)
+            return lambda ratio, angle: self._Te_from_ratio[1](ratio, angle)
 
     @property
     def Te_from_1over2(self) -> Callable[..., float | np.ndarray | None]:
@@ -245,9 +278,9 @@ class DoubleFilter:
         if self._Te_from_ratio is None:
             return lambda *args, **kwargs: None
         if isinstance(self._Te_from_ratio[1], interp1d):
-            return lambda ratio, angle: self._Te_from_ratio[1](ratio)
+            return lambda ratio, angle: self._Te_from_ratio[0](ratio)
         else:
-            return lambda ratio, angle: self._Te_from_ratio[1](ratio, angle)
+            return lambda ratio, angle: self._Te_from_ratio[0](ratio, angle)
 
     def set_Te_from_ratio(self, Te: float | np.ndarray | None = None,
                           E_ph: np.ndarray | None = None,
@@ -271,9 +304,13 @@ class DoubleFilter:
             self.E_ph if E_ph is None else E_ph, name="E_ph"
         )
 
+        self.set_intensity_response(Te=Te, E_ph=E_ph, angle=angle)
+
         if type_check.is_number(angle):
             # only one angle, no need for 2D interpolation
-            ratio_12, ratio_21 = self.intensity_ratios(Te=Te, E_ph=E_ph, angle=angle)
+            ratio_12, ratio_21 = self.intensity_ratios_points_from_response(
+                Te=Te, angle=angle
+            )
             if len(ratio_12) < 2 or len(ratio_21) < 2:
                 self._Te_from_ratio = None
                 return
@@ -284,7 +321,10 @@ class DoubleFilter:
         else:
             angle = type_check.as_numeric_vector(angle, name="angle")
             TT, AA = np.meshgrid(np.insert(Te, 0, 0), angle, indexing='ij')  # (N_Te, N_angle)
-            ratio_12, ratio_21 = self.intensity_ratios(Te=Te, E_ph=E_ph, angle=angle)
+            Te_mesh, angle_mesh = np.meshgrid(Te, angle, indexing='ij')
+            ratio_12, ratio_21 = self.intensity_ratios_points_from_response(
+                Te=Te_mesh, angle=angle_mesh
+            )
             ratio_12 = type_check.as_numeric_array(
                 ratio_12, name="ratio_1over2"
             ).reshape(Te.size, -1)
@@ -342,12 +382,12 @@ if __name__ == "__main__":
     ax2.set_ylim(0, 5)
     double_filter.set_Te_from_ratio(Te=Te, E_ph=None, angle=0)
     ratio_test = np.array([0.1, 0.5, 1.0, 2.0, 5.0])
-    Te_from_ratio12 = double_filter.Te_from_2over1(ratio_test, angle=0.0)
-    Te_from_ratio21 = double_filter.Te_from_1over2(ratio_test, angle=0.0)
-    print("Ratio (filter2/filter1):", ratio_test)
-    print("Te from ratio (filter2/filter1):", Te_from_ratio12)
-    print("Te from ratio (filter1/filter2):", Te_from_ratio21)
-    ratio12_from_Te = double_filter.intensity_ratios(Te=Te_from_ratio12, angle=0.0)[0]
+    Te_from_ratio21 = double_filter.Te_from_2over1(ratio_test, angle=0.0)
+    Te_from_ratio12 = double_filter.Te_from_1over2(ratio_test, angle=0.0)
+    print("Ratio:", ratio_test)
+    print("Te from ratio (filter2/filter1):", Te_from_ratio21)
+    print("Te from ratio (filter1/filter2):", Te_from_ratio12)
     ratio21_from_Te = double_filter.intensity_ratios(Te=Te_from_ratio21, angle=0.0)[1]
-    print("Ratio from Te_from_2over1:", ratio12_from_Te)
-    print("Ratio from Te_from_1over2:", ratio21_from_Te)
+    ratio12_from_Te = double_filter.intensity_ratios(Te=Te_from_ratio12, angle=0.0)[0]
+    print("Ratio from Te_from_2over1:", ratio21_from_Te)
+    print("Ratio from Te_from_1over2:", ratio12_from_Te)

@@ -52,6 +52,36 @@ class FilterLike(Protocol):
                   Z_eff: float = 1.0, E_ph: np.ndarray | None = None,
                   angle: np.ndarray | float = 0) -> np.ndarray: ...
 
+    def intensity_lookup(self, Te: float | np.ndarray, ne: float = 5e18,
+                         Z_eff: float = 1.0, E_ph: np.ndarray | None = None,
+                         angle: np.ndarray | float = 0,
+                         Te_grid: np.ndarray | None = None,
+                         n_Te: int = 256) -> np.ndarray: ...
+
+    def intensity_points(self, Te: float | np.ndarray, ne: float | np.ndarray = 5e18,
+                         Z_eff: float | np.ndarray = 1.0,
+                         E_ph: np.ndarray | None = None,
+                         angle: np.ndarray | float = 0) -> np.ndarray: ...
+
+    def intensity_points_lookup(self, Te: float | np.ndarray,
+                                ne: float | np.ndarray = 5e18,
+                                Z_eff: float | np.ndarray = 1.0,
+                                E_ph: np.ndarray | None = None,
+                                angle: np.ndarray | float = 0,
+                                Te_grid: np.ndarray | None = None,
+                                angle_grid: np.ndarray | None = None,
+                                n_Te: int = 256,
+                                n_angle: int = 181) -> np.ndarray: ...
+
+    def set_intensity_response(self, Te: np.ndarray | None = None,
+                               E_ph: np.ndarray | None = None,
+                               angle: np.ndarray | float = 0.0) -> None: ...
+
+    def intensity_points_from_response(self, Te: float | np.ndarray,
+                                       ne: float | np.ndarray = 5e18,
+                                       Z_eff: float | np.ndarray = 1.0,
+                                       angle: np.ndarray | float = 0) -> np.ndarray: ...
+
     def temperature_response(self, Te: np.ndarray, ne: float = 5e18,
                              Z_eff: float = 1.0, E_ph: np.ndarray | None = None,
                              angle: np.ndarray | float = 0) -> np.ndarray: ...
@@ -74,6 +104,287 @@ def _filter_intensity(filter_: FilterLike, Te: float | np.ndarray, ne: float,
         spectra=spectrum, E_ph=E_ph, transmission=transmission
     )
     return intensity.squeeze()
+
+
+def _auto_temperature_grid(Te: np.ndarray, n_Te: int) -> np.ndarray:
+    """Build a logarithmic temperature grid spanning the requested values."""
+    if not type_check.is_int(n_Te) or n_Te < 1:
+        raise ValueError("n_Te must be a positive integer")
+    positive = Te[np.isfinite(Te) & (Te > 0)]
+    if positive.size == 0:
+        return np.array([0.01])
+    Te_min = max(float(np.min(positive)), 0.01)
+    Te_max = max(float(np.max(positive)), Te_min)
+    if Te_min == Te_max:
+        return np.array([Te_min])
+    return np.logspace(np.log10(Te_min), np.log10(Te_max), n_Te)
+
+
+def _auto_angle_grid(angle: np.ndarray, n_angle: int) -> np.ndarray:
+    """Build a linear angle grid spanning the requested values."""
+    if not type_check.is_int(n_angle) or n_angle < 1:
+        raise ValueError("n_angle must be a positive integer")
+    finite = angle[np.isfinite(angle)]
+    if finite.size == 0:
+        return np.array([0.0])
+    angle_min = float(np.min(finite))
+    angle_max = float(np.max(finite))
+    if angle_min == angle_max:
+        return np.array([angle_min])
+    return np.linspace(angle_min, angle_max, n_angle)
+
+
+def _filter_response_grid(filter_: FilterLike, Te_grid: np.ndarray, E_ph: np.ndarray,
+                          angle: np.ndarray) -> np.ndarray:
+    """Integrate the filter response on a one-dimensional temperature grid."""
+    transmission = filter_.transmission_angle(E_ph=E_ph, angle=angle, squeeze=False)
+    kernel = np.exp(-E_ph / Te_grid[:, None])
+    kernel, transmission = type_check.align_last_axis_for_broadcast(
+        kernel, transmission, name="kernel and transmission"
+    )
+    return brems.integrate_spectrum(kernel, E_ph, transmission=transmission)
+
+
+def _normalize_response_axes(Te: np.ndarray | None, E_ph: np.ndarray | None,
+                             angle: np.ndarray | float,
+                             default_E_ph: np.ndarray
+                             ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Normalize axes used to precompute a transmitted-intensity response table."""
+    Te_grid = type_check.as_numeric_vector(
+        np.logspace(1, 4, 256) if Te is None else Te, name="Te"
+    )
+    if np.any(Te_grid <= 0):
+        raise ValueError("Te must contain only positive values")
+    Te_grid = np.unique(Te_grid)
+
+    E_ph = type_check.as_numeric_vector(
+        default_E_ph if E_ph is None else E_ph, name="E_ph"
+    )
+    angle_grid = type_check.as_numeric_array(angle, min_ndim=1, name="angle")
+    angle_grid = np.clip(np.abs(angle_grid), 0, np.pi / 2 - 1e-3)
+    angle_grid = np.unique(angle_grid)
+    return Te_grid, E_ph, angle_grid
+
+
+def _build_intensity_response(filter_: FilterLike, Te: np.ndarray | None,
+                              E_ph: np.ndarray | None,
+                              angle: np.ndarray | float
+                              ) -> dict[str, np.ndarray]:
+    """Build a reusable response table for pointwise filtered intensities."""
+    Te_grid, E_ph, angle_grid = _normalize_response_axes(
+        Te, E_ph, angle, filter_.E_ph
+    )
+    response_grid = _filter_response_grid(filter_, Te_grid, E_ph, angle_grid)
+    return {
+        "Te_grid": Te_grid,
+        "E_ph": E_ph,
+        "angle_grid": angle_grid,
+        "response_grid": response_grid,
+    }
+
+
+def _normalize_point_fields(Te: float | np.ndarray, ne: float | np.ndarray,
+                            Z_eff: float | np.ndarray,
+                            angle: np.ndarray | float
+                            ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Broadcast plasma fields and pointwise filter angles to a shared shape."""
+    Te = type_check.as_numeric_array(Te, name="Te")
+    ne = type_check.as_numeric_array(ne, name="ne")
+    Z_eff = type_check.as_numeric_array(Z_eff, name="Z_eff")
+    angle = type_check.as_numeric_array(angle, name="angle")
+    angle = np.clip(np.abs(angle), 0, np.pi / 2 - 1e-3)
+    return np.broadcast_arrays(Te, ne, Z_eff, angle)
+
+
+def _filter_intensity_points(filter_: FilterLike, Te: float | np.ndarray,
+                             ne: float | np.ndarray, Z_eff: float | np.ndarray,
+                             E_ph: np.ndarray | None,
+                             angle: np.ndarray | float) -> np.ndarray:
+    """Integrate filtered bremsstrahlung for pointwise-matched fields."""
+    E_ph = type_check.as_numeric_vector(
+        filter_.E_ph if E_ph is None else E_ph, name="E_ph"
+    )
+    Te, ne, Z_eff, angle = _normalize_point_fields(Te, ne, Z_eff, angle)
+    spectrum = brems.bremsstrahlung_spectrum(Te=Te, ne=ne, Z_eff=Z_eff, E_ph=E_ph)
+    transmission = filter_.transmission_angle(E_ph=E_ph, angle=angle, squeeze=False)
+    transmission = transmission.reshape(angle.shape + (E_ph.size,))
+    return brems.integrate_spectrum(
+        spectra=spectrum, E_ph=E_ph, transmission=transmission
+    )
+
+
+def _check_interpolation_bounds(values: np.ndarray, grid: np.ndarray, name: str) -> None:
+    """Reject silent extrapolation outside a precomputed response grid."""
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return
+    lower = grid[0]
+    upper = grid[-1]
+    if np.any((finite < lower) | (finite > upper)):
+        raise ValueError(
+            f"{name} is outside the precomputed response grid "
+            f"[{lower}, {upper}]"
+        )
+
+
+def _interp_response_grid(Te: np.ndarray, Te_grid: np.ndarray,
+                          response_grid: np.ndarray) -> np.ndarray:
+    """Interpolate a response grid along log temperature."""
+    _check_interpolation_bounds(np.maximum(Te, 0.01), Te_grid, "Te")
+    if Te_grid.size == 1:
+        return np.broadcast_to(response_grid[0], Te.shape + response_grid.shape[1:])
+
+    log_grid = np.log(Te_grid)
+    log_Te = np.log(np.maximum(Te, 0.01))
+    flat_response = response_grid.reshape((Te_grid.size, -1))
+    flat_out = np.empty((log_Te.size, flat_response.shape[1]), dtype=float)
+
+    tiny = np.finfo(float).tiny
+    for index in range(flat_response.shape[1]):
+        flat_out[:, index] = np.exp(
+            np.interp(
+                log_Te.ravel(),
+                log_grid,
+                np.log(np.maximum(flat_response[:, index], tiny)),
+            )
+        )
+    return flat_out.reshape(log_Te.shape + response_grid.shape[1:])
+
+
+def _interp_response_table(Te: np.ndarray, angle: np.ndarray,
+                           Te_grid: np.ndarray, angle_grid: np.ndarray,
+                           response_grid: np.ndarray) -> np.ndarray:
+    """Interpolate a two-dimensional log-response table for pointwise fields."""
+    Te = np.maximum(Te, 0.01)
+    angle = np.clip(np.abs(angle), 0, np.pi / 2 - 1e-3)
+    _check_interpolation_bounds(Te, Te_grid, "Te")
+    _check_interpolation_bounds(angle, angle_grid, "angle")
+
+    log_Te_grid = np.log(Te_grid)
+    log_Te = np.log(Te).ravel()
+    angle = angle.ravel()
+    log_response = np.log(np.maximum(response_grid, np.finfo(float).tiny))
+
+    if Te_grid.size == 1:
+        t0 = t1 = np.zeros_like(log_Te, dtype=int)
+        wt = np.zeros_like(log_Te)
+    else:
+        t0 = np.searchsorted(log_Te_grid, log_Te, side="right") - 1
+        t0 = np.clip(t0, 0, Te_grid.size - 2)
+        t1 = t0 + 1
+        wt = (log_Te - log_Te_grid[t0]) / (log_Te_grid[t1] - log_Te_grid[t0])
+
+    if angle_grid.size == 1:
+        a0 = a1 = np.zeros_like(angle, dtype=int)
+        wa = np.zeros_like(angle)
+    else:
+        a0 = np.searchsorted(angle_grid, angle, side="right") - 1
+        a0 = np.clip(a0, 0, angle_grid.size - 2)
+        a1 = a0 + 1
+        wa = (angle - angle_grid[a0]) / (angle_grid[a1] - angle_grid[a0])
+
+    v00 = log_response[t0, a0]
+    v10 = log_response[t1, a0]
+    v01 = log_response[t0, a1]
+    v11 = log_response[t1, a1]
+    interp = (
+        (1 - wt) * (1 - wa) * v00
+        + wt * (1 - wa) * v10
+        + (1 - wt) * wa * v01
+        + wt * wa * v11
+    )
+    return np.exp(interp).reshape(Te.shape)
+
+
+def _filter_intensity_lookup(filter_: FilterLike, Te: float | np.ndarray, ne: float,
+                             Z_eff: float, E_ph: np.ndarray | None,
+                             angle: np.ndarray | float,
+                             Te_grid: np.ndarray | None,
+                             n_Te: int) -> np.ndarray:
+    """Approximate filtered bremsstrahlung intensity using a temperature response table."""
+    E_ph = type_check.as_numeric_vector(
+        filter_.E_ph if E_ph is None else E_ph, name="E_ph"
+    )
+    angle = type_check.as_numeric_array(angle, min_ndim=1, name="angle")
+    Te = type_check.as_numeric_array(Te, name="Te")
+    prefactor = brems.bremsstrahlung_prefactor(Te, ne, Z_eff)
+    Te_broadcast = np.broadcast_to(np.maximum(Te, 0.01), prefactor.shape)
+
+    if Te_grid is None:
+        Te_grid = _auto_temperature_grid(Te_broadcast, n_Te)
+    else:
+        Te_grid = type_check.as_numeric_vector(Te_grid, name="Te_grid")
+        if np.any(Te_grid <= 0):
+            raise ValueError("Te_grid must contain only positive values")
+        Te_grid = np.unique(Te_grid)
+
+    response_grid = _filter_response_grid(filter_, Te_grid, E_ph, angle)
+    response = _interp_response_grid(Te_broadcast, Te_grid, response_grid)
+    prefactor = prefactor.reshape(prefactor.shape + (1,) * angle.ndim)
+    return (prefactor * response).squeeze()
+
+
+def _filter_intensity_points_lookup(filter_: FilterLike, Te: float | np.ndarray,
+                                    ne: float | np.ndarray,
+                                    Z_eff: float | np.ndarray,
+                                    E_ph: np.ndarray | None,
+                                    angle: np.ndarray | float,
+                                    Te_grid: np.ndarray | None,
+                                    angle_grid: np.ndarray | None,
+                                    n_Te: int,
+                                    n_angle: int) -> np.ndarray:
+    """Approximate pointwise filtered intensity using a Te-angle response table."""
+    E_ph = type_check.as_numeric_vector(
+        filter_.E_ph if E_ph is None else E_ph, name="E_ph"
+    )
+    Te, ne, Z_eff, angle = _normalize_point_fields(Te, ne, Z_eff, angle)
+    prefactor = brems.bremsstrahlung_prefactor(Te, ne, Z_eff)
+    Te_clipped = np.maximum(Te, 0.01)
+
+    if Te_grid is None:
+        Te_grid = _auto_temperature_grid(Te_clipped, n_Te)
+    else:
+        Te_grid = type_check.as_numeric_vector(Te_grid, name="Te_grid")
+        if np.any(Te_grid <= 0):
+            raise ValueError("Te_grid must contain only positive values")
+        Te_grid = np.unique(Te_grid)
+
+    if angle_grid is None:
+        angle_grid = _auto_angle_grid(angle, n_angle)
+    else:
+        angle_grid = type_check.as_numeric_vector(angle_grid, name="angle_grid")
+        angle_grid = np.clip(np.abs(angle_grid), 0, np.pi / 2 - 1e-3)
+        angle_grid = np.unique(angle_grid)
+
+    response_grid = _filter_response_grid(filter_, Te_grid, E_ph, angle_grid)
+    response = _interp_response_table(
+        Te_clipped, angle, Te_grid, angle_grid, response_grid
+    )
+    return prefactor * response
+
+
+def _filter_intensity_points_from_response(response_table: dict[str, np.ndarray],
+                                           Te: float | np.ndarray,
+                                           ne: float | np.ndarray,
+                                           Z_eff: float | np.ndarray,
+                                           angle: np.ndarray | float) -> np.ndarray:
+    """Evaluate pointwise intensity using a precomputed response table."""
+    Te, ne, Z_eff, angle = _normalize_point_fields(Te, ne, Z_eff, angle)
+    prefactor = brems.bremsstrahlung_prefactor(Te, ne, Z_eff)
+    response = _interp_response_table(
+        np.maximum(Te, 0.01),
+        angle,
+        response_table["Te_grid"],
+        response_table["angle_grid"],
+        response_table["response_grid"],
+    )
+    return prefactor * response
+
+
+def _require_intensity_response(response_table: dict[str, np.ndarray] | None) -> dict[str, np.ndarray]:
+    if response_table is None:
+        raise ValueError("call set_intensity_response() before intensity_points_from_response()")
+    return response_table
 
 
 def _temperature_response(filter_: FilterLike, Te: np.ndarray, ne: float,
@@ -425,6 +736,7 @@ class AbsorptionFilter:
         self._info = info
         self._E_ph = _atten_len_data[:, 0].ravel()
         self._attn_len = _atten_len_data[:, 1].ravel()
+        self._intensity_response: dict[str, np.ndarray] | None = None
 
     def __repr__(self) -> str:
         return f"AbsorptionFilter(material={self.material}, thickness={self.thickness}, density={self.density})"
@@ -555,6 +867,55 @@ class AbsorptionFilter:
         """
         return _filter_intensity(self, Te, ne, Z_eff, E_ph, angle)
 
+    def intensity_lookup(self, Te: float | np.ndarray, ne: float = 5e18,
+                         Z_eff: float = 1.0, E_ph: np.ndarray | None = None,
+                         angle: np.ndarray | float = 0,
+                         Te_grid: np.ndarray | None = None,
+                         n_Te: int = 256) -> np.ndarray:
+        """Approximate transmitted bremsstrahlung intensity using a Te response table.
+
+        The expensive photon-energy integration is performed only for ``Te_grid``
+        values, then interpolated in log-temperature for the requested ``Te``.
+        If ``Te_grid`` is omitted, a logarithmic grid spanning ``Te`` is used.
+        """
+        return _filter_intensity_lookup(self, Te, ne, Z_eff, E_ph, angle, Te_grid, n_Te)
+
+    def intensity_points(self, Te: float | np.ndarray, ne: float | np.ndarray = 5e18,
+                         Z_eff: float | np.ndarray = 1.0,
+                         E_ph: np.ndarray | None = None,
+                         angle: np.ndarray | float = 0) -> np.ndarray:
+        """Calculate pointwise transmitted intensity for matching field shapes."""
+        return _filter_intensity_points(self, Te, ne, Z_eff, E_ph, angle)
+
+    def intensity_points_lookup(self, Te: float | np.ndarray,
+                                ne: float | np.ndarray = 5e18,
+                                Z_eff: float | np.ndarray = 1.0,
+                                E_ph: np.ndarray | None = None,
+                                angle: np.ndarray | float = 0,
+                                Te_grid: np.ndarray | None = None,
+                                angle_grid: np.ndarray | None = None,
+                                n_Te: int = 256,
+                                n_angle: int = 181) -> np.ndarray:
+        """Approximate pointwise intensity with a temporary Te-angle response table."""
+        return _filter_intensity_points_lookup(
+            self, Te, ne, Z_eff, E_ph, angle, Te_grid, angle_grid, n_Te, n_angle
+        )
+
+    def set_intensity_response(self, Te: np.ndarray | None = None,
+                               E_ph: np.ndarray | None = None,
+                               angle: np.ndarray | float = 0.0) -> None:
+        """Precompute a reusable Te-angle response table for pointwise intensity."""
+        self._intensity_response = _build_intensity_response(self, Te, E_ph, angle)
+
+    def intensity_points_from_response(self, Te: float | np.ndarray,
+                                       ne: float | np.ndarray = 5e18,
+                                       Z_eff: float | np.ndarray = 1.0,
+                                       angle: np.ndarray | float = 0) -> np.ndarray:
+        """Evaluate pointwise intensity using the precomputed response table."""
+        return _filter_intensity_points_from_response(
+            _require_intensity_response(self._intensity_response), Te, ne, Z_eff, angle
+        )
+
     def temperature_response(self, Te: np.ndarray, ne: float = 5e18,
                              Z_eff: float = 1.0, E_ph: np.ndarray | None = None,
                              angle: np.ndarray | float = 0) -> np.ndarray:
@@ -610,6 +971,7 @@ class FilterSet:
         if not filters:
             raise ValueError("filters must contain at least one AbsorptionFilter")
         self._filters = list(filters)
+        self._intensity_response: dict[str, np.ndarray] | None = None
 
     def __repr__(self) -> str:
         return f"FilterSet(filters={self.filters})"
@@ -789,6 +1151,55 @@ class FilterSet:
             Angle of incidence [rad].
         """
         return _filter_intensity(self, Te, ne, Z_eff, E_ph, angle)
+
+    def intensity_lookup(self, Te: float | np.ndarray, ne: float = 5e18,
+                         Z_eff: float = 1.0, E_ph: np.ndarray | None = None,
+                         angle: np.ndarray | float = 0,
+                         Te_grid: np.ndarray | None = None,
+                         n_Te: int = 256) -> np.ndarray:
+        """Approximate transmitted bremsstrahlung intensity using a Te response table.
+
+        The expensive photon-energy integration is performed only for ``Te_grid``
+        values, then interpolated in log-temperature for the requested ``Te``.
+        If ``Te_grid`` is omitted, a logarithmic grid spanning ``Te`` is used.
+        """
+        return _filter_intensity_lookup(self, Te, ne, Z_eff, E_ph, angle, Te_grid, n_Te)
+
+    def intensity_points(self, Te: float | np.ndarray, ne: float | np.ndarray = 5e18,
+                         Z_eff: float | np.ndarray = 1.0,
+                         E_ph: np.ndarray | None = None,
+                         angle: np.ndarray | float = 0) -> np.ndarray:
+        """Calculate pointwise transmitted intensity for matching field shapes."""
+        return _filter_intensity_points(self, Te, ne, Z_eff, E_ph, angle)
+
+    def intensity_points_lookup(self, Te: float | np.ndarray,
+                                ne: float | np.ndarray = 5e18,
+                                Z_eff: float | np.ndarray = 1.0,
+                                E_ph: np.ndarray | None = None,
+                                angle: np.ndarray | float = 0,
+                                Te_grid: np.ndarray | None = None,
+                                angle_grid: np.ndarray | None = None,
+                                n_Te: int = 256,
+                                n_angle: int = 181) -> np.ndarray:
+        """Approximate pointwise intensity with a temporary Te-angle response table."""
+        return _filter_intensity_points_lookup(
+            self, Te, ne, Z_eff, E_ph, angle, Te_grid, angle_grid, n_Te, n_angle
+        )
+
+    def set_intensity_response(self, Te: np.ndarray | None = None,
+                               E_ph: np.ndarray | None = None,
+                               angle: np.ndarray | float = 0.0) -> None:
+        """Precompute a reusable Te-angle response table for pointwise intensity."""
+        self._intensity_response = _build_intensity_response(self, Te, E_ph, angle)
+
+    def intensity_points_from_response(self, Te: float | np.ndarray,
+                                       ne: float | np.ndarray = 5e18,
+                                       Z_eff: float | np.ndarray = 1.0,
+                                       angle: np.ndarray | float = 0) -> np.ndarray:
+        """Evaluate pointwise intensity using the precomputed response table."""
+        return _filter_intensity_points_from_response(
+            _require_intensity_response(self._intensity_response), Te, ne, Z_eff, angle
+        )
 
     def temperature_response(self, Te: np.ndarray, ne: float = 5e18,
                              Z_eff: float = 1.0, E_ph: np.ndarray | None = None,
