@@ -613,9 +613,10 @@ class VMECData:
                 boundary_r - target_r, boundary_z - target_z
             )
             on_boundary = float(np.min(boundary_distance)) <= tol
-            if not on_boundary and not self._inside_polygon(
-                    target_r, target_z, boundary_r, boundary_z
-            ):
+            inside_lcfs = self._inside_polygon(
+                target_r, target_z, boundary_r, boundary_z
+            )
+            if not on_boundary and not inside_lcfs:
                 nearest = int(np.argmin(boundary_distance))
 
                 def boundary_error(value: np.ndarray) -> np.ndarray:
@@ -632,8 +633,18 @@ class VMECData:
                     gtol=solver_tol,
                     max_nfev=max_nfev,
                 )
-                out_residual[index] = np.linalg.norm(boundary_solution.fun)
-                out_status[index] = "outside_lcfs"
+                boundary_residual = float(np.linalg.norm(boundary_solution.fun))
+                if boundary_residual > tol:
+                    out_residual[index] = boundary_residual
+                    out_status[index] = "outside_lcfs"
+                    continue
+                out_s[index] = 1.0
+                out_theta[index] = np.mod(
+                    boundary_solution.x[0], 2.0 * np.pi
+                )
+                out_residual[index] = boundary_residual
+                out_valid[index] = True
+                out_status[index] = "converged"
                 continue
 
             axis_r, axis_z, _ = self.to_cylindrical(

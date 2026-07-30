@@ -162,6 +162,19 @@ def test_inverse_distinguishes_outside_axis_and_nonconvergence():
     assert np.isfinite(failed.residual)
 
 
+def test_inverse_accepts_points_on_exact_lcfs_curve():
+    vmec = circular_equilibrium()
+    expected_theta = np.array([0.3, 1.234, 3.7])
+    cartesian = vmec.to_cartesian(1.0, expected_theta, 0.2)
+
+    result = vmec.from_cartesian(*cartesian, tol=1e-10)
+
+    assert result.valid.all()
+    assert np.all(result.status == "converged")
+    np.testing.assert_allclose(result.s, 1.0, atol=1e-10)
+    np.testing.assert_allclose(result.theta, expected_theta, atol=1e-9)
+
+
 def test_forward_map_rejects_lcfs_extrapolation_by_default():
     vmec = circular_equilibrium()
     with pytest.raises(ValueError, match="outside"):
