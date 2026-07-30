@@ -40,6 +40,32 @@ Example scripts are available in `demo/`:
 - `demo/plot_demo.py`
 - `demo/spectrum_analysis_demo.py`
 
+## VMEC coordinate mapping
+
+`ingkit.io.VMECData` reads VMEC NetCDF `wout_*.nc` equilibria and maps
+magnetic coordinates to cylindrical or Cartesian coordinates. It can also
+numerically invert Cartesian points:
+
+```python
+from ingkit.io import VMECData
+
+equilibrium = VMECData("wout_example.nc")
+x, y, z = equilibrium.to_cartesian(s=0.5, theta=1.0, phi=0.2)
+result = equilibrium.from_cartesian(x=x, y=y, z=z)
+
+if result.valid:
+    print(result.s, result.rho, result.theta, result.phi)
+```
+
+Inputs may be scalars, paired arrays, or NumPy-broadcastable arrays. See
+[docs/vmec.md](docs/vmec.md) for the coordinate convention, failure handling,
+and solver controls.
+
+The VMEC layer owns equilibrium I/O, Fourier coefficients, and coordinate
+mapping only. Camera geometry, voxels, visibility, projection matrices,
+emission profiles, and line integration belong in downstream packages.
+`ingkit` does not provide a VMEC writer.
+
 ## License
 
 This project is licensed under the MIT License.
