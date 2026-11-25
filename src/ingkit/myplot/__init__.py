@@ -3,15 +3,16 @@ from matplotlib import pyplot
 
 from . import styles
 from .colormap import get_cmap_with_extreme
+from .styles import available_styles
 
 __all__ = [
     "styles",
     "get_cmap_with_extreme",
-    "pyplot",
     "use_style",
     "use_my_default",
+    "available_styles",
 ]
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 
 def use_style(*style_name: str | styles.Path):
