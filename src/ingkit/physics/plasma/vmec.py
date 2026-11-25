@@ -979,11 +979,7 @@ class VMECData:
 
 
 if __name__ == '__main__':
-    # file_path = ("/Users/inagakishinichiro/Documents/KyotoUniv/4_works/4_1_codes/misc/vmec_calc/vmectest"
-    #              "/symmetric_tokamak/zero_beta/wout_symmetric_tokamak_zero_beta.nc")
-    file_path = (
-        "/Users/inagakishinichiro/Documents/KyotoUniv/2_experiments/2_4_exp_analysis/HJ_MECH_2025/vmec_out"
-        "/wout_bstd89.nt800.nc")
+    file_path = Path(__file__).parents[4] / "samples/vmec/wout_bstd89.nt800.nc"
     vmec_data = VMECData(file_path)
 
     print(vmec_data.flux_surface(s=1, phi=0, coordinates="rpz").shape)

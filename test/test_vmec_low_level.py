@@ -87,7 +87,7 @@ def test_missing_geometry_does_not_block_loading(wout):
     'wout_symmetric_tokamak_zero_beta.nc',
 ])
 def test_real_wout_stored_surface_fourier_sum(filename):
-    path = Path(__file__).parents[1] / 'src' / 'ingkit' / 'io' / filename
+    path = Path(__file__).parents[1] / 'samples' / 'vmec' / filename
     vmec = VMECData(path)
     theta, phi = .731, .217
     phase = vmec.wout['xm']*theta - vmec.wout['xn']*phi
@@ -165,7 +165,7 @@ def test_axis_missing_and_symmetric_omissions(wout):
     'wout_symmetric_tokamak_zero_beta.nc',
 ])
 def test_real_axis_matches_degenerate_surface_and_one_period_rotation(filename):
-    path = Path(__file__).parents[1] / 'src' / 'ingkit' / 'io' / filename
+    path = Path(__file__).parents[1] / 'samples' / 'vmec' / filename
     vmec = VMECData(path)
     phi = np.array([0., .17, .51, 2*np.pi])
     axis = vmec.magnetic_axis(phi=phi, coordinates='rpz')
@@ -253,7 +253,7 @@ def test_star_shape_axis_intersection_and_missing_axis(lcfs_wout, wout):
     'wout_symmetric_tokamak_zero_beta.nc',
 ])
 def test_real_lcfs_fourier_derivative_matches_angle_difference(filename):
-    path = Path(__file__).parents[1] / 'src' / 'ingkit' / 'io' / filename
+    path = Path(__file__).parents[1] / 'samples' / 'vmec' / filename
     vmec = VMECData(path, oversample_theta=2)
     theta, phi = np.array([.13, 1.2, 3.7]), np.array([.07, .23])
     step = 1e-5
@@ -447,7 +447,7 @@ def test_real_space_fields_at_axis_lcfs_and_outside(field_wout):
     "wout_symmetric_tokamak_zero_beta.nc",
 ])
 def test_real_wout_field_norm_matches_stored_strength(filename):
-    path = Path(__file__).parents[1] / "src" / "ingkit" / "io" / filename
+    path = Path(__file__).parents[1] / "samples" / "vmec" / filename
     vmec = VMECData(path)
     points = [[.14, .3, .2], [.37, 3.2, .45], [.8, 2*np.pi - 1e-6, np.pi - 1e-6],
               [.92, 4.4, 2*np.pi + .2]]

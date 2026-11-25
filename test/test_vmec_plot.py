@@ -8,7 +8,7 @@ from ingkit.myplot.vmec_plot import plot_cylindrical_field, plot_flux_surfaces_3
 from ingkit.physics.plasma.vmec import VMECData
 
 
-DATA_DIR = Path(__file__).parents[1] / "src" / "ingkit" / "io"
+DATA_DIR = Path(__file__).parents[1] / "samples" / "vmec"
 WOUT_FILE = "wout_helical_rfp_zero_beta.nc"
 
 
