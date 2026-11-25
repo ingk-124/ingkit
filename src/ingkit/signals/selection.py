@@ -3,20 +3,18 @@
 from __future__ import annotations
 
 import operator
+from typing import Literal
 
 import numpy as np
 
 __all__ = ["select_time"]
 
 
-def select_time(
-    data: np.ndarray,
-    t_arr: np.ndarray,
-    t_0: float | None = None,
-    t_1: float | None = None,
-    axis: int = -1,
-    return_mask: bool = False,
-) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+def select_time(data: np.ndarray, t_arr: np.ndarray,
+                t_0: float | None = None, t_1: float | None = None,
+                axis: int = -1, return_mask: bool = False,
+                closed: Literal["left", "right", "both", "neither"] = "left",
+                ) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
     """
     Select data within a specified time range.
 
@@ -27,15 +25,21 @@ def select_time(
     t_arr : np.ndarray (n,)
         Time values corresponding to the selected axis of `data`.
     t_0 : float, optional
-        Start time of the range, inclusive. Default is None, which leaves the
+        Start time of the range. Default is None, which leaves the
         lower bound unrestricted.
     t_1 : float, optional
-        End time of the range, inclusive. Default is None, which leaves the
+        End time of the range. Default is None, which leaves the
         upper bound unrestricted.
     axis : int, optional
         Axis corresponding to `t_arr`. Default is -1.
     return_mask : bool, optional
         Whether to return the boolean selection mask. Default is False.
+    closed : {'left', 'right', 'both', 'neither'}, optional
+        Whether the interval is closed on the left, right, both or neither side. Default is 'left'.
+        - 'left': [t_0, t_1)
+        - 'right': (t_0, t_1]
+        - 'both': [t_0, t_1]
+        - 'neither': (t_0, t_1)
 
     Returns
     -------
@@ -59,6 +63,8 @@ def select_time(
 
     if t_arr.ndim != 1:
         raise ValueError("t_arr must be one-dimensional")
+    if closed not in ("left", "right", "both", "neither"):
+        raise ValueError("closed must be one of 'left', 'right', 'both', or 'neither'")
 
     axis = operator.index(axis)
     if not -data.ndim <= axis < data.ndim:
@@ -73,9 +79,15 @@ def select_time(
 
     mask = np.ones(t_arr.shape, dtype=bool)
     if t_0 is not None:
-        mask &= t_arr >= t_0
+        if closed in ("left", "both"):
+            mask &= t_arr >= t_0
+        else:
+            mask &= t_arr > t_0
     if t_1 is not None:
-        mask &= t_arr <= t_1
+        if closed in ("right", "both"):
+            mask &= t_arr <= t_1
+        else:
+            mask &= t_arr < t_1
 
     selected_data = np.compress(mask, data, axis=axis)
     if return_mask:
