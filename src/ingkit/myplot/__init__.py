@@ -12,7 +12,7 @@ __all__ = [
     "use_my_default",
     "available_styles",
 ]
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 
 def use_style(*style_name: str | styles.Path):
