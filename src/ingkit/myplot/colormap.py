@@ -7,6 +7,7 @@ import matplotlib
 from matplotlib import pyplot as plt
 
 
+# TODO: ListedColormap 以外も返るため、戻り値の型注釈を Colormap にする。
 def get_cmap_with_extreme(name: str,
                           bad: str | tuple | list = None,
                           under: str | tuple | list = None,

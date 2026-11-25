@@ -25,6 +25,7 @@ dependencies = [
 plotly = ["plotly"]
 
 [tool.setuptools]
+# TODO: myplot/styles/*.mplstyle を配布対象に明示し、wheel への同梱を検証する。
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]

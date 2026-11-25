@@ -20,6 +20,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 MY_STYLE_DIR = Path(__file__).parent / "styles"
+# TODO: 同梱スタイルとユーザー保存先を分離し、import 時のディレクトリ作成をなくす。
 MY_STYLE_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -84,6 +85,7 @@ def _find_style(*style_name: str | Path) -> str | list[str]:
         elif isinstance(style_name, Path):  # Path
             style_path_str = str(style_name.resolve())  # Absolute path as string
             try:
+                # TODO: 不正な設定値を読み飛ばさず例外にし、ValueError の契約を満たす。
                 mpl.rc_params_from_file(style_path_str)  # Check if it's a valid style file
                 return style_path_str  # Return the path as string for compatibility with plt.style.use()
             except Exception as e:  # Invalid style file
@@ -145,10 +147,12 @@ def context(style_name: str | Path = "default", *style_names: str | Path) -> Ite
 
 
 def save_style(style_name: str) -> Path:
+    # TODO: パッケージ内部ではなく、ユーザーが書き込めるスタイル保存先を使う。
     style_path = MY_STYLE_DIR / f"{style_name}.mplstyle"
     if style_path.exists():
         raise ValueError(f"Style '{style_name}' already exists. Choose a different name.")
 
+    # TODO: hex 色、フォントのリスト、色以外を含む cycler を再読み込みで再現できる形式にする。
     with open(style_path, "w") as f:
         for key in sorted(plt.rcParams):
             current = plt.rcParams[key]
@@ -180,6 +184,8 @@ def get_rcParams(style_name: str | Path) -> dict:
     rcParams : dict
         Dictionary of rcParams defined in the style.
     """
+    # TODO: 現在の rcParams を混入させず、指定スタイルの設定だけを返す。
+    # quick_look でも無関係な現在設定が表示されないことを確認する。
     with context(style_name):
         rcParams = plt.rcParams.copy()
     return rcParams
