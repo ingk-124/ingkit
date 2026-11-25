@@ -1,4 +1,4 @@
-"""Plotting helpers for :class:`ingkit.io.read_vmec.VMECData`."""
+"""Plotting helpers for :class:`ingkit.physics.plasma.vmec.VMECData`."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 if TYPE_CHECKING:
-    from ingkit.io.read_vmec import VMECData
+    from ingkit.physics.plasma.vmec import VMECData
 
 
 def _default_surface_indices(ns: int) -> list[int]:
@@ -64,23 +64,26 @@ def plot_flux_surfaces_3d(
         # A radial cutaway keeps inner nested surfaces visible.
         v_start = (index / vmec.ns) ** 0.6 * 2.0 * np.pi / 3.0
         v_arr = np.linspace(v_start, v_end, nv)
-        coordinates, field = vmec.get_B_field_cartesian(u_arr, v_arr)
-        X, Y, Z = coordinates
-        B_X, B_Y, B_Z = field
+        s = vmec.s_grid[index]
+        xyz = vmec.flux_surface(s, theta=u_arr, phi=v_arr, coordinates="xyz")
+        X, Y, Z = np.moveaxis(xyz, -1, 0)
         fig.add_trace(go.Surface(
-            x=X[index], y=Y[index], z=Z[index],
-            surfacecolor=np.zeros_like(X[index]),
+            x=X, y=Y, z=Z,
+            surfacecolor=np.zeros_like(X),
             colorscale=[[0, colors[index]], [1, colors[index]]],
             showscale=False, opacity=1, name=f"Flux surface {index}",
         ))
 
         if index == vmec.ns - 1:
             continue
-        selection = np.s_[index, ::vector_step, 1:-1:vector_step]
-        for target, array in zip(vector_coordinates, coordinates):
-            target.append(array[selection])
-        for target, array in zip(vector_components, field):
-            target.append(array[selection])
+        selection = np.s_[::vector_step, 1:-1:vector_step]
+        flux_points = np.stack(np.meshgrid(s, u_arr[::vector_step],
+                                           v_arr[1:-1:vector_step], indexing="ij"), axis=-1)[0]
+        field = vmec.magnetic_field(flux_points, basis="cartesian")
+        for target, array in zip(vector_coordinates, np.moveaxis(xyz[selection], -1, 0)):
+            target.append(array)
+        for target, array in zip(vector_components, np.moveaxis(field, -1, 0)):
+            target.append(array)
 
     if vector_coordinates[0]:
         X_vec, Y_vec, Z_vec = [np.concatenate(values).ravel()
@@ -110,16 +113,10 @@ def plot_flux_surfaces_3d(
     return fig
 
 
-def plot_cylindrical_field(
-        vmec: VMECData,
-        *,
-        v: float = 0.0,
-        nu: int = 101,
-        radial_step: int = 5,
-        angular_step: int = 5,
-        levels: int = 21,
-        ax: plt.Axes | None = None,
-) -> tuple[plt.Figure, plt.Axes]:
+def plot_cylindrical_field(vmec: VMECData, *, v: float = 0.0, nu: int = 101,
+                           radial_step: int = 5, angular_step: int = 5, levels: int = 21,
+                           scale: float = 1.0,                           ax: plt.Axes | None = None, ) -> tuple[
+    plt.Figure, plt.Axes]:
     """Plot toroidal field and poloidal vectors on one toroidal plane."""
     if nu < 2:
         raise ValueError("nu must be at least 2")
@@ -132,9 +129,10 @@ def plot_cylindrical_field(
         fig = ax.figure
 
     u_arr = np.linspace(0.0, 2.0 * np.pi, nu)
-    (R, Z, _), (B_R, B_Z, B_phi) = vmec.get_B_field_cylindrical(
-        u_arr, np.array([v])
-    )
+    rpz = vmec.flux_surface(vmec.s_grid, theta=u_arr, phi=[v], coordinates="rpz")
+    flux_points = np.stack(np.meshgrid(vmec.s_grid, u_arr, [v], indexing="ij"), axis=-1)
+    R, _, Z = np.moveaxis(rpz, -1, 0)
+    B_R, B_phi, B_Z = np.moveaxis(vmec.magnetic_field(flux_points), -1, 0)
     contour = ax.contourf(
         R[1:, :, 0], Z[1:, :, 0], B_phi[1:, :, 0] * 1e3,
         levels=levels, cmap="viridis",
@@ -145,7 +143,7 @@ def plot_cylindrical_field(
         Z[1::radial_step, ::angular_step, 0],
         B_R[1::radial_step, ::angular_step, 0],
         B_Z[1::radial_step, ::angular_step, 0],
-        color="k", scale=1,
+        color="k", scale=scale,
     )
     ax.set(xlabel="R [m]", ylabel="Z [m]",
            title=f"Magnetic field at v={v:.3g} rad")
@@ -155,10 +153,10 @@ def plot_cylindrical_field(
 
 
 if __name__ == "__main__":
-    from ingkit.io.read_vmec import VMECData
+    from ingkit.physics.plasma.vmec import VMECData
 
-    data_path = Path(__file__).parents[1] / "io" / "wout_helical_rfp_zero_beta.nc"
+    data_path = Path(__file__).parents[3] / "samples/vmec/wout_bstd89.nt800.nc"
     vmec_data = VMECData(data_path)
-    plot_flux_surfaces_3d(vmec_data).show()
+    plot_flux_surfaces_3d(vmec_data, sizeref=0.3).show()
     plot_cylindrical_field(vmec_data)
     plt.show()

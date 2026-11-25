@@ -42,29 +42,28 @@ Example scripts are available in `demo/`:
 
 ## VMEC coordinate mapping
 
-`ingkit.io.VMECData` reads VMEC NetCDF `wout_*.nc` equilibria and maps
-magnetic coordinates to cylindrical or Cartesian coordinates. It can also
-numerically invert Cartesian points:
+`ingkit.physics.plasma.vmec.VMECData` reads VMEC NetCDF `wout_*.nc`
+equilibria, evaluates magnetic geometry and equilibrium fields, and maps
+real-space points to flux coordinates:
 
 ```python
-from ingkit.io import VMECData
+from ingkit.physics.plasma.vmec import VMECData
 
 equilibrium = VMECData("wout_example.nc")
-x, y, z = equilibrium.to_cartesian(s=0.5, theta=1.0, phi=0.2)
-result = equilibrium.from_cartesian(x=x, y=y, z=z)
-
-if result.valid:
-    print(result.s, result.rho, result.theta, result.phi)
+xyz = equilibrium.flux_surface(s=0.5, theta=1.0, phi=0.2)
+s, theta_vmec = equilibrium.points_to_flux(xyz, coordinates="xyz", return_theta=True)
+B = equilibrium.magnetic_field_at(xyz, coordinates="xyz")
 ```
 
-Inputs may be scalars, paired arrays, or NumPy-broadcastable arrays. See
-[docs/vmec.md](docs/vmec.md) for the coordinate convention, failure handling,
-and solver controls.
+Surface methods evaluate a tensor product of scalar or 1-D coordinate inputs;
+field methods accept paired points of shape `(..., 3)`. See
+[docs/vmec_low_level.md](docs/vmec_low_level.md) for units, conventions,
+boundary handling, and sampling requirements. The legacy `ingkit.io` VMEC
+API was removed in 0.3.0; see [the migration guide](docs/vmec.md).
 
-The VMEC layer owns equilibrium I/O, Fourier coefficients, and coordinate
-mapping only. Camera geometry, voxels, visibility, projection matrices,
-emission profiles, and line integration belong in downstream packages.
-`ingkit` does not provide a VMEC writer.
+Camera geometry, voxels, visibility, projection matrices, emission profiles,
+and line integration belong in downstream packages. `ingkit` does not
+provide a VMEC writer.
 
 ## License
 

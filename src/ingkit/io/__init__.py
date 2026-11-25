@@ -1,19 +1,4 @@
-"""Input/output helpers."""
+"""Input/output namespace.
 
-from .read_vmec import (
-    CartesianCoordinates,
-    CylindricalCoordinates,
-    InverseCoordinateResult,
-    VMECData,
-    VMECFourierCoefficients,
-    VMECValidationError,
-)
-
-__all__ = [
-    "CartesianCoordinates",
-    "CylindricalCoordinates",
-    "InverseCoordinateResult",
-    "VMECData",
-    "VMECFourierCoefficients",
-    "VMECValidationError",
-]
+VMEC equilibrium access is provided by ingkit.physics.plasma.vmec.
+"""
